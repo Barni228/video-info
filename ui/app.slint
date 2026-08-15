@@ -1,0 +1,111 @@
+import { Button, ScrollView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+
+export struct InfoRow {
+    label: string,
+    value: string,
+}
+
+export component AppWindow inherits Window {
+    title: "Video Inspector";
+    preferred-width: 640px;
+    preferred-height: 580px;
+    min-width: 480px;
+    min-height: 420px;
+    background: #11111b;
+
+    in-out property <bool> has-file: false;
+    in-out property <bool> is-drag-hover: false;
+    in-out property <string> file-name: "";
+    in-out property <string> status-text: "";
+    in-out property <bool> is-error: false;
+    in-out property <[InfoRow]> info-rows: [];
+
+    callback browse-clicked();
+
+    VerticalBox {
+        padding: 18px;
+        spacing: 12px;
+
+        Text {
+            text: "Video Inspector";
+            font-size: 22px;
+            font-weight: 700;
+            color: #cdd6f4;
+        }
+
+        Rectangle {
+            height: has-file ? 84px : 170px;
+            border-radius: 12px;
+            border-width: 2px;
+            border-color: is-drag-hover ? #89b4fa : #45475a;
+            background: is-drag-hover ? #1e2030 : #181825;
+
+            VerticalBox {
+                alignment: center;
+                spacing: 4px;
+
+                Text {
+                    text: has-file ? file-name : "Drag & drop a video file here";
+                    color: #cdd6f4;
+                    font-size: 16px;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    visible: !has-file;
+                    text: "or use the button below";
+                    color: #a6adc8;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+
+        Button {
+            text: "Browse for video...";
+            clicked => { root.browse-clicked(); }
+        }
+
+        Text {
+            visible: status-text != "";
+            text: status-text;
+            color: is-error ? #f38ba8 : #a6adc8;
+            font-size: 13px;
+            wrap: word-wrap;
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+
+            VerticalBox {
+                padding: 0px;
+                spacing: 6px;
+
+                for row in info-rows: Rectangle {
+                    background: #181825;
+                    border-radius: 6px;
+
+                    HorizontalBox {
+                        padding: 6px;
+                        spacing: 8px;
+
+                        Text {
+                            text: row.label;
+                            font-weight: 600;
+                            color: #89b4fa;
+                            width: 150px;
+                        }
+
+                        Text {
+                            text: row.value;
+                            color: #cdd6f4;
+                            wrap: word-wrap;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
