@@ -4,6 +4,9 @@
     windows_subsystem = "windows"
 )]
 
+// TODO: do support the macos open with dialog, you need to create some delegate and handle stuff
+// https://docs.rs/winit/latest/x86_64-apple-darwin/winit/platform/macos/index.html
+
 slint::include_modules!();
 
 use serde::Deserialize;
@@ -120,6 +123,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // --- Opened via "Open With <app>" / double-click on an associated file ---
+    // TODO: does not work on MacOS
+    if let Some(path) = std::env::args().nth(1) {
+        let path = PathBuf::from(path);
+        if path.exists() {
+            analyze_file(&app.as_weak(), path);
+        }
+    }
+
     app.run()?;
     Ok(())
 }
@@ -161,7 +173,8 @@ fn analyze_file(app_weak: &Weak<AppWindow>, path: PathBuf) {
 }
 
 fn run_ffprobe(path: &Path) -> Result<Vec<InfoRow>, String> {
-    let output = Command::new("ffprobe")
+    // let output = Command::new("ffprobe")
+    let output = Command::new("/opt/homebrew/bin/ffprobe")
         .args([
             "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams",
             "-show_chapters",

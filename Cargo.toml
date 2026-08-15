@@ -13,3 +13,33 @@ serde_json = "1"
 
 [build-dependencies]
 slint-build = "1.9"
+
+[package.metadata.packager]
+product-name = "Video Inspector"
+identifier = "com.barni.videoinspector"
+version = "0.1.0"
+before-packaging-command = "cargo build --release"
+icons = ["icons/256x256.png"]
+category = "Utility"
+
+# Registers Video Inspector as an "Open With" option for these video extensions.
+# On macOS this becomes CFBundleDocumentTypes in Info.plist.
+[[package.metadata.packager.file-associations]]
+extensions = [
+    "mp4",
+    "mkv",
+    "mov",
+    "avi",
+    "webm",
+    "m4v",
+    "mpg",
+    "mpeg",
+    "flv",
+    "wmv",
+]
+# name = "Video File"
+name = "Video"
+role = "viewer"
+
+[package.metadata.packager.macos]
+minimum-system-version = "11.0"
