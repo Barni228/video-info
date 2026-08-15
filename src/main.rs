@@ -11,7 +11,8 @@ use slint::{ModelRc, VecModel, Weak};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use slint::winit_030::{winit, WinitWindowAccessor};
+use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
+use std::collections::HashMap;
 use winit::event::WindowEvent as WinitWindowEvent;
 
 #[derive(Debug, Deserialize)]
@@ -19,6 +20,16 @@ struct FfprobeOutput {
     #[serde(default)]
     streams: Vec<StreamInfo>,
     format: Option<FormatInfo>,
+    #[serde(default)]
+    chapters: Vec<ChapterInfo>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChapterInfo {
+    start_time: Option<String>,
+    end_time: Option<String>,
+    #[serde(default)]
+    tags: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,6 +49,8 @@ struct StreamInfo {
     channel_layout: Option<String>,
     display_aspect_ratio: Option<String>,
     bits_per_raw_sample: Option<String>,
+    #[serde(default)]
+    tags: HashMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -60,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- Native OS drag & drop support ---
     {
         let app_weak = app.as_weak();
-        app.window().on_winit_window_event(move |_, event| {
+        app.window().on_winit_window_event(move |_window, event| {
             match event {
                 WinitWindowEvent::HoveredFile(_) => {
                     if let Some(app) = app_weak.upgrade() {
@@ -80,7 +93,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 _ => {}
             }
-            slint::winit_030::EventResult::Propagate
+            EventResult::Propagate
         });
     }
 
@@ -149,7 +162,10 @@ fn analyze_file(app_weak: &Weak<AppWindow>, path: PathBuf) {
 
 fn run_ffprobe(path: &Path) -> Result<Vec<InfoRow>, String> {
     let output = Command::new("ffprobe")
-        .args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams"])
+        .args([
+            "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams",
+            "-show_chapters",
+        ])
         .arg(path)
         .output()
         .map_err(|e| {
@@ -258,6 +274,50 @@ fn run_ffprobe(path: &Path) -> Result<Vec<InfoRow>, String> {
             }
         }
         None => rows.push(row("Audio", "No audio stream found")),
+    }
+
+    let subtitle_streams: Vec<&StreamInfo> = parsed
+        .streams
+        .iter()
+        .filter(|s| s.codec_type.as_deref() == Some("subtitle"))
+        .collect();
+
+    if subtitle_streams.is_empty() {
+        rows.push(row("Subtitles", "None"));
+    } else {
+        for (i, s) in subtitle_streams.iter().enumerate() {
+            let codec = s.codec_long_name.clone().or_else(|| s.codec_name.clone());
+            let lang = s.tags.get("language").cloned();
+            let title = s.tags.get("title").cloned();
+
+            let mut desc = codec.unwrap_or_else(|| "Unknown format".to_string());
+            if let Some(lang) = lang {
+                desc.push_str(&format!(" ({lang})"));
+            }
+            if let Some(title) = title {
+                desc.push_str(&format!(" - {title}"));
+            }
+
+            rows.push(row(&format!("Subtitle track {}", i + 1), &desc));
+        }
+    }
+
+    if !parsed.chapters.is_empty() {
+        rows.push(row("Chapters", &parsed.chapters.len().to_string()));
+        for (i, c) in parsed.chapters.iter().enumerate() {
+            let start = c.start_time.as_deref().and_then(|s| s.parse::<f64>().ok());
+            let end = c.end_time.as_deref().and_then(|s| s.parse::<f64>().ok());
+            let title = c.tags.get("title").cloned();
+
+            let range = match (start, end) {
+                (Some(s), Some(e)) => format!("{} - {}", human_duration(s), human_duration(e)),
+                (Some(s), None) => human_duration(s),
+                _ => "Unknown timing".to_string(),
+            };
+            let label = title.unwrap_or_else(|| format!("Chapter {}", i + 1));
+
+            rows.push(row(&format!("  {}", i + 1), &format!("{label} ({range})")));
+        }
     }
 
     Ok(rows)
