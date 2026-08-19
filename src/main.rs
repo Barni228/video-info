@@ -226,13 +226,26 @@ fn locate_ffprobe() -> PathBuf {
 }
 
 fn run_ffprobe(path: &Path) -> Result<Vec<InfoRow>, String> {
-    let output = Command::new(locate_ffprobe())
-        .args([
-            "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams",
-            "-show_chapters",
-        ])
-        .arg(path)
-        .output()
+    let mut cmd = Command::new(locate_ffprobe());
+    cmd.args([
+        // "error" (rather than "quiet") so failures come back with a reason
+        // instead of an empty message.
+        "-v", "error", "-print_format", "json", "-show_format", "-show_streams",
+        "-show_chapters",
+    ])
+    .arg(path);
+
+    // Prevent ffprobe's console window from flashing on screen: ffprobe.exe
+    // is a console app, and spawning one from a windowed (console-less) app
+    // otherwise still briefly pops up a new console window.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let output = cmd.output()
         .map_err(|e| {
             format!(
                 "Could not run ffprobe ({e}). Make sure ffmpeg/ffprobe is installed and on your PATH."
