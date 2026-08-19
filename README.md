@@ -21,8 +21,10 @@ hood to read the file.
 
 ## Requirements
 
-`ffprobe` (part of [FFmpeg](https://ffmpeg.org/)) must be installed
-and available on your system.
+Released builds bundle `ffprobe` (part of [FFmpeg](https://ffmpeg.org/)),
+so no separate install is needed. If you build from source and skip the
+packaging step (`cargo run`), `ffprobe` must be installed and on your
+`PATH` instead.
 
 ## Installation
 
@@ -54,7 +56,11 @@ xattr -cr "/Applications/Video Info.app"
    cargo build --release
    cargo run --release
    ```
-4. To package a `.app`/`.dmg` on macOS:
+4. To package a `.app`/`.dmg`/installer with a bundled `ffprobe`, place a
+   static `ffprobe` binary at `binaries/ffprobe-<target-triple>` (e.g.
+   `binaries/ffprobe-aarch64-apple-darwin`, or `.exe` on Windows) — see
+   [.github/workflows/release.yml](.github/workflows/release.yml) for
+   where CI downloads these from — then run:
    ```sh
    cargo install cargo-packager --locked
    cargo packager --release
@@ -62,4 +68,6 @@ xattr -cr "/Applications/Video Info.app"
 
 ## License
 
-[MIT](LICENSE)
+Video Info is [MIT](LICENSE) licensed. Released builds bundle a separately
+licensed `ffprobe` binary (GPL on macOS, LGPL on Windows — see
+[.github/workflows/release.yml](.github/workflows/release.yml) for sources).

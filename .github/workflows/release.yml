@@ -37,6 +37,29 @@ jobs:
         if: steps.cache-cargo-packager.outputs.cache-hit != 'true'
         run: cargo install cargo-packager@0.11.8 --locked
 
+      # Bundles a static ffprobe into the package (see `external-binaries` in
+      # Cargo.toml) so the app works without ffmpeg installed on the user's
+      # machine. cargo-packager expects it at `binaries/ffprobe-<target-triple>`.
+      - name: Download ffprobe (macOS, Apple Silicon)
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p binaries
+          curl -fLo /tmp/ffprobe.zip https://www.osxexperts.net/ffprobe9arm.zip
+          unzip -o /tmp/ffprobe.zip -d /tmp/ffprobe
+          mv /tmp/ffprobe/ffprobe binaries/ffprobe-aarch64-apple-darwin
+          chmod +x binaries/ffprobe-aarch64-apple-darwin
+          xattr -cr binaries/ffprobe-aarch64-apple-darwin
+          codesign -s - binaries/ffprobe-aarch64-apple-darwin
+
+      - name: Download ffprobe (Windows x64)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p binaries
+          curl -fLo /tmp/ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+          unzip -o /tmp/ffmpeg.zip -d /tmp/ffmpeg
+          cp /tmp/ffmpeg/*/bin/ffprobe.exe binaries/ffprobe-x86_64-pc-windows-msvc.exe
+
       - run: cargo packager --release
 
       - name: Rename portable Windows binary

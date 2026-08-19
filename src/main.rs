@@ -202,8 +202,31 @@ fn analyze_file(app_weak: &Weak<AppWindow>, path: PathBuf) {
     });
 }
 
+/// Find the `ffprobe` binary to run: prefer the copy bundled next to this
+/// app's own executable (see `external-binaries` in `Cargo.toml`, copied
+/// there by `cargo packager`), falling back to `PATH` for dev builds run
+/// via `cargo run` or when the user has ffmpeg installed system-wide.
+fn locate_ffprobe() -> PathBuf {
+    let exe_name = if cfg!(windows) {
+        "ffprobe.exe"
+    } else {
+        "ffprobe"
+    };
+
+    let bundled = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(exe_name)));
+    if let Some(bundled) = bundled
+        && bundled.is_file()
+    {
+        return bundled;
+    }
+
+    PathBuf::from(exe_name)
+}
+
 fn run_ffprobe(path: &Path) -> Result<Vec<InfoRow>, String> {
-    let output = Command::new("/opt/homebrew/bin/ffprobe")
+    let output = Command::new(locate_ffprobe())
         .args([
             "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams",
             "-show_chapters",

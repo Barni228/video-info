@@ -25,6 +25,13 @@ before-packaging-command = "cargo build --release"
 icons = ["icons/512x512.png"]
 category = "Utility"
 
+# Bundled ffprobe so the app works without ffmpeg installed. The path here
+# omits the `-<target-triple>` suffix; cargo-packager appends it when
+# resolving the source file (see CI workflow, which downloads these before
+# `cargo packager` runs) and strips it back off when copying into the
+# package, placing the binary next to the app's own executable.
+external-binaries = ["binaries/ffprobe"]
+
 # Registers Video Inspector as an "Open With" option for these video extensions.
 # On macOS this becomes CFBundleDocumentTypes in Info.plist.
 [[package.metadata.packager.file-associations]]
