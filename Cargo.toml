@@ -20,7 +20,6 @@ slint-build = "1.9"
 [package.metadata.packager]
 product-name = "Video Info"
 identifier = "com.barni.videoinfo"
-version = "0.1.0"
 before-packaging-command = "cargo build --release"
 icons = ["icons/512x512.png"]
 category = "Utility"
