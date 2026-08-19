@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 Video Info: a small Rust desktop app built with [Slint](https://slint.rs/) that shells out to `ffprobe` to display metadata (container, codecs, resolution, bitrate, chapters, subtitles) for a video file. The user picks a file via drag-and-drop onto the window or a native file-picker button.
+It has to be cross-platform (works with Mac and Windows)
 
 ## Commands
 

@@ -25,21 +25,51 @@ export component AppWindow inherits Window {
     in-out property <bool> is-error: false;
     in-out property <[InfoRow]> info-rows: [];
 
+    // Zoom level applied to font sizes and layout metrics, like a browser's
+    // page zoom. 1.0 = 100%. Controlled by the View menu / Cmd +/-/0.
+    in-out property <float> zoom: 1.0;
+
     callback browse-clicked();
 
+    MenuBar {
+        Menu {
+            title: "View";
+
+            MenuItem {
+                title: "Zoom In";
+                // Bound to the unshifted "=" key (not "+"/Shift+=) so the
+                // plain Cmd+= press most people reflexively use also works.
+                shortcut: @keys(Control + Equals);
+                activated => { root.zoom = min(root.zoom + 0.1, 3.0); }
+            }
+
+            MenuItem {
+                title: "Zoom Out";
+                shortcut: @keys(Control + HyphenMinus);
+                activated => { root.zoom = max(root.zoom - 0.1, 0.5); }
+            }
+
+            MenuItem {
+                title: "Reset Zoom";
+                shortcut: @keys(Control + "0");
+                activated => { root.zoom = 1.0; }
+            }
+        }
+    }
+
     VerticalBox {
-        padding: 18px;
-        spacing: 12px;
+        padding: 18px * root.zoom;
+        spacing: 12px * root.zoom;
 
         Text {
             text: "Video Info";
-            font-size: 22px;
+            font-size: 22px * root.zoom;
             font-weight: 700;
             color: #cdd6f4;
         }
 
         Rectangle {
-            height: has-file ? 84px : 170px;
+            height: (has-file ? 84px : 170px) * root.zoom;
             border-radius: 12px;
             border-width: 2px;
             border-color: is-drag-hover ? #89b4fa : #45475a;
@@ -47,12 +77,12 @@ export component AppWindow inherits Window {
 
             VerticalBox {
                 alignment: center;
-                spacing: 4px;
+                spacing: 4px * root.zoom;
 
                 Text {
                     text: has-file ? file-name : "Drag & drop a video file here";
                     color: #cdd6f4;
-                    font-size: 16px;
+                    font-size: 16px * root.zoom;
                     horizontal-alignment: center;
                     wrap: word-wrap;
                 }
@@ -61,7 +91,7 @@ export component AppWindow inherits Window {
                     visible: !has-file;
                     text: "or use the button below";
                     color: #a6adc8;
-                    font-size: 13px;
+                    font-size: 13px * root.zoom;
                     horizontal-alignment: center;
                 }
             }
@@ -76,7 +106,7 @@ export component AppWindow inherits Window {
             visible: status-text != "";
             text: status-text;
             color: is-error ? #f38ba8 : #a6adc8;
-            font-size: 13px;
+            font-size: 13px * root.zoom;
             wrap: word-wrap;
         }
 
@@ -85,25 +115,27 @@ export component AppWindow inherits Window {
 
             VerticalBox {
                 padding: 0px;
-                spacing: 6px;
+                spacing: 6px * root.zoom;
 
                 for row in info-rows: Rectangle {
                     background: #181825;
                     border-radius: 6px;
 
                     HorizontalBox {
-                        padding: 6px;
-                        spacing: 8px;
+                        padding: 6px * root.zoom;
+                        spacing: 8px * root.zoom;
 
                         Text {
                             text: row.label;
+                            font-size: 14px * root.zoom;
                             font-weight: 600;
                             color: #89b4fa;
-                            width: 150px;
+                            width: 150px * root.zoom;
                         }
 
                         Text {
                             text: row.value;
+                            font-size: 14px * root.zoom;
                             color: #cdd6f4;
                             wrap: word-wrap;
                             horizontal-stretch: 1;
