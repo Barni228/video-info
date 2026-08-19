@@ -4,10 +4,10 @@
     windows_subsystem = "windows"
 )]
 
-// TODO: do support the macos open with dialog, you need to create some delegate and handle stuff
-// https://docs.rs/winit/latest/x86_64-apple-darwin/winit/platform/macos/index.html
-
 slint::include_modules!();
+
+#[cfg(target_os = "macos")]
+mod macos_open;
 
 use serde::Deserialize;
 use slint::{ModelRc, VecModel, Weak};
@@ -71,7 +71,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .backend_name("winit".into())
         .select()?;
 
+    #[cfg(target_os = "macos")]
+    let open_doc_rx = {
+        macos_open::log_line("[main] process started");
+        macos_open::take_receiver()
+    };
+
     let app = AppWindow::new()?;
+
+    // --- macOS "Open With" / already-running file-open support ---
+    // Must come after AppWindow::new(), since it needs winit to have already
+    // created NSApplication and set its own delegate -- we're adding a
+    // method to that existing delegate's class, not replacing the delegate
+    // itself (see macos_open.rs for why).
+    #[cfg(target_os = "macos")]
+    {
+        macos_open::log_line("[main] AppWindow created");
+        macos_open::install_open_urls_swizzle();
+
+        let app_weak = app.as_weak();
+        std::thread::spawn(move || {
+            while let Ok(path) = open_doc_rx.recv() {
+                let app_weak = app_weak.clone();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(app) = app_weak.upgrade() {
+                        analyze_file(&app.as_weak(), PathBuf::from(path));
+                    }
+                });
+            }
+        });
+    }
 
     // --- Native OS drag & drop support ---
     {
@@ -123,8 +152,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // --- Opened via "Open With <app>" / double-click on an associated file ---
-    // TODO: does not work on MacOS
+    // --- Opened via CLI arg (Windows file associations, or `cargo run -- file.mp4`) ---
+    // Not used by macOS "Open With", which is handled via the delegate
+    // swizzle in macos_open.rs above.
     if let Some(path) = std::env::args().nth(1) {
         let path = PathBuf::from(path);
         if path.exists() {

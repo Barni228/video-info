@@ -1,13 +1,14 @@
 [package]
-name = "video-inspector"
+name = "video-info"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 # unstable-winit-030 gives us access to raw winit window events (WindowEvent::DroppedFile)
 # so we can support native OS drag-and-drop of files onto the window.
 slint = { version = "1.9", features = ["unstable-winit-030"] }
-rfd = "0.15"
+# os file-picker dialog
+rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -15,11 +16,11 @@ serde_json = "1"
 slint-build = "1.9"
 
 [package.metadata.packager]
-product-name = "Video Inspector"
-identifier = "com.barni.videoinspector"
+product-name = "Video Info"
+identifier = "com.barni.videoinfo"
 version = "0.1.0"
 before-packaging-command = "cargo build --release"
-icons = ["icons/256x256.png"]
+icons = ["icons/512x512.png"]
 category = "Utility"
 
 # Registers Video Inspector as an "Open With" option for these video extensions.
@@ -37,8 +38,7 @@ extensions = [
     "flv",
     "wmv",
 ]
-# name = "Video File"
-name = "Video"
+name = "Video File"
 role = "viewer"
 
 [package.metadata.packager.macos]

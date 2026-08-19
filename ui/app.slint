@@ -1,4 +1,9 @@
-import { Button, ScrollView, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import {
+    Button,
+    ScrollView,
+    VerticalBox,
+    HorizontalBox,
+} from "std-widgets.slint";
 
 export struct InfoRow {
     label: string,
@@ -6,7 +11,7 @@ export struct InfoRow {
 }
 
 export component AppWindow inherits Window {
-    title: "Video Inspector";
+    title: "Video Info";
     preferred-width: 640px;
     preferred-height: 580px;
     min-width: 480px;
@@ -27,7 +32,7 @@ export component AppWindow inherits Window {
         spacing: 12px;
 
         Text {
-            text: "Video Inspector";
+            text: "Video Info";
             font-size: 22px;
             font-weight: 700;
             color: #cdd6f4;
