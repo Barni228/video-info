@@ -1,38 +1,65 @@
-# Slint Rust Template
+# Video Info
 
-A template for a Rust application that's using [Slint](https://slint.rs/) for the user interface.
+A small, modern alternative to MediaInfo. Video Info is a lightweight
+desktop app that shows you the technical metadata of a video file:
+container format, video/audio/subtitle codecs, resolution, bitrate,
+frame rate, duration, file size, and chapters.
 
-## About
+It's cross-platform (macOS and Windows), built in Rust with
+[Slint](https://slint.rs/) for the UI, and uses `ffprobe` under the
+hood to read the file.
 
-This template helps you get started developing a Rust application with Slint as toolkit
-for the user interface. It demonstrates the integration between the `.slint` UI markup and
-Rust code, how to react to callbacks, get and set properties, and use basic widgets.
+## Features
 
-## Usage
+- Drag and drop a video file onto the window, or use the native file
+  picker
+- Open file with "Open With" option for common video files
+  (mp4, mkv, mov, avi, webm, m4v, mpg, mpeg, flv, wmv)
+- Container, video/audio/subtitle stream, and chapter details
+- Zoom controls (`Cmd`/`Ctrl` +/-/0) to scale the UI
+- Analysis runs in the background so the UI never blocks
 
-1. Install Rust by following its [getting-started guide](https://www.rust-lang.org/learn/get-started).
-   Once this is done, you should have the `rustc` compiler and the `cargo` build system installed in your `PATH`.
-2. Download and extract the [ZIP archive of this repository](https://github.com/slint-ui/slint-rust-template/archive/refs/heads/main.zip).
-3. Rename the extracted directory and change into it:
-    ```
-    mv slint-rust-template-main my-project
-    cd my-project    
-    ```
-4. Build with `cargo`:
-    ```
-    cargo build
-    ```
-5. Run the application binary:
-    ```
-    cargo run
-    ```
+## Requirements
 
-We recommend using an IDE for development, along with our [LSP-based IDE integration for `.slint` files](https://github.com/slint-ui/slint/blob/master/tools/lsp/README.md). You can also load this project directly in [Visual Studio Code](https://code.visualstudio.com) and install our [Slint extension](https://marketplace.visualstudio.com/items?itemName=Slint.slint).
+`ffprobe` (part of [FFmpeg](https://ffmpeg.org/)) must be installed
+and available on your system.
 
-## Next Steps
+## Installation
 
-We hope that this template helps you get started, and that you enjoy exploring making user interfaces with Slint. To learn more
-about the Slint APIs and the `.slint` markup language, check out our [online documentation](https://slint.dev/docs).
+Download the latest build for your platform from the
+[GitHub Releases](../../releases) page (`.dmg` for macOS, `.exe`/`.msi`
+for Windows).
 
-Don't forget to edit this readme to replace it by yours, and edit the `name =` field in `Cargo.toml` to match the name of your
-project.
+### "App is damaged and can't be opened" (downloaded builds)
+
+The `.dmg`/`.app` files on GitHub Releases aren't signed with a paid Apple
+Developer ID or notarized by Apple. macOS adds `com.apple.quarantine` to
+browser downloads, so Gatekeeper may show "is damaged and can't be opened".
+The app isn't actually broken
+
+To run it anyway:
+
+```sh
+xattr -cr "/Applications/Video Info.app"
+```
+
+(or wherever you moved it), then open it normally.
+
+## Building from source
+
+1. Install Rust via the [getting-started guide](https://www.rust-lang.org/learn/get-started).
+2. Clone this repository and change into it.
+3. Build and run:
+   ```sh
+   cargo build --release
+   cargo run --release
+   ```
+4. To package a `.app`/`.dmg` on macOS:
+   ```sh
+   cargo install cargo-packager --locked
+   cargo packager --release
+   ```
+
+## License
+
+[MIT](LICENSE)

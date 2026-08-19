@@ -14,7 +14,7 @@ use slint::{ModelRc, VecModel, Weak};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
+use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use std::collections::HashMap;
 use winit::event::WindowEvent as WinitWindowEvent;
 
@@ -203,7 +203,6 @@ fn analyze_file(app_weak: &Weak<AppWindow>, path: PathBuf) {
 }
 
 fn run_ffprobe(path: &Path) -> Result<Vec<InfoRow>, String> {
-    // let output = Command::new("ffprobe")
     let output = Command::new("/opt/homebrew/bin/ffprobe")
         .args([
             "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams",
@@ -377,11 +376,7 @@ fn parse_fraction(s: &str) -> Option<f64> {
     let mut parts = s.split('/');
     let num: f64 = parts.next()?.parse().ok()?;
     let den: f64 = parts.next()?.parse().ok()?;
-    if den == 0.0 {
-        None
-    } else {
-        Some(num / den)
-    }
+    if den == 0.0 { None } else { Some(num / den) }
 }
 
 fn human_duration(secs: f64) -> String {
