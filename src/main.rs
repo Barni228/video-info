@@ -152,6 +152,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // --- Copy All button ---
+    {
+        let app_weak = app.as_weak();
+        app.on_copy_all_clicked(move || {
+            if let Some(app) = app_weak.upgrade()
+                && let Ok(mut clipboard) = copypasta::ClipboardContext::new()
+            {
+                let _ = copypasta::ClipboardProvider::set_contents(
+                    &mut clipboard,
+                    app.get_raw_info_text().to_string(),
+                );
+            }
+        });
+    }
+
     // --- Opened via CLI arg (Windows file associations, or `cargo run -- file.mp4`) ---
     // Not used by macOS "Open With", which is handled via the delegate
     // swizzle in macos_open.rs above.
@@ -179,6 +194,7 @@ fn analyze_file(app_weak: &Weak<AppWindow>, path: PathBuf) {
         app.set_status_text("Analyzing...".into());
         app.set_is_error(false);
         app.set_info_rows(ModelRc::new(VecModel::from(Vec::<InfoRow>::new())));
+        app.set_raw_info_text("".into());
     }
 
     let app_weak = app_weak.clone();
@@ -190,6 +206,7 @@ fn analyze_file(app_weak: &Weak<AppWindow>, path: PathBuf) {
                     Ok(rows) => {
                         app.set_status_text("".into());
                         app.set_is_error(false);
+                        app.set_raw_info_text(format_rows(&rows).into());
                         app.set_info_rows(ModelRc::new(VecModel::from(rows)));
                     }
                     Err(err) => {
@@ -230,7 +247,12 @@ fn run_ffprobe(path: &Path) -> Result<Vec<InfoRow>, String> {
     cmd.args([
         // "error" (rather than "quiet") so failures come back with a reason
         // instead of an empty message.
-        "-v", "error", "-print_format", "json", "-show_format", "-show_streams",
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
         "-show_chapters",
     ])
     .arg(path);
@@ -245,12 +267,11 @@ fn run_ffprobe(path: &Path) -> Result<Vec<InfoRow>, String> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = cmd.output()
-        .map_err(|e| {
-            format!(
-                "Could not run ffprobe ({e}). Make sure ffmpeg/ffprobe is installed and on your PATH."
-            )
-        })?;
+    let output = cmd.output().map_err(|e| {
+        format!(
+            "Could not run ffprobe ({e}). Make sure ffmpeg/ffprobe is installed and on your PATH."
+        )
+    })?;
 
     if !output.status.success() {
         return Err(format!(
@@ -406,6 +427,13 @@ fn row(label: &str, value: &str) -> InfoRow {
         label: label.into(),
         value: value.into(),
     }
+}
+
+fn format_rows(rows: &[InfoRow]) -> String {
+    rows.iter()
+        .map(|row| format!("{}: {}", row.label, row.value))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn parse_fraction(s: &str) -> Option<f64> {

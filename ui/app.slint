@@ -1,6 +1,7 @@
 import {
     Button,
     ScrollView,
+    Switch,
     VerticalBox,
     HorizontalBox,
 } from "std-widgets.slint";
@@ -24,12 +25,18 @@ export component AppWindow inherits Window {
     in-out property <string> status-text: "";
     in-out property <bool> is-error: false;
     in-out property <[InfoRow]> info-rows: [];
+    // Same data as info-rows, flattened to "label: value" lines, for the
+    // raw-text view (a single selectable block, easier to select-all/copy
+    // from than the per-row layout).
+    in-out property <string> raw-info-text: "";
+    in-out property <bool> show-raw-view: false;
 
     // Zoom level applied to font sizes and layout metrics, like a browser's
     // page zoom. 1.0 = 100%. Controlled by the View menu / Cmd +/-/0.
     in-out property <float> zoom: 1.0;
 
     callback browse-clicked();
+    callback copy-all-clicked();
 
     MenuBar {
         Menu {
@@ -110,9 +117,39 @@ export component AppWindow inherits Window {
             wrap: word-wrap;
             read-only: true;
             single-line: false;
+            text-cursor-width: 0px;
         }
 
-        ScrollView {
+        HorizontalBox {
+            visible: info-rows.length > 0;
+            padding: 0px;
+            alignment: end;
+
+            Switch {
+                text: "Raw Text View";
+                checked <=> root.show-raw-view;
+            }
+
+            Button {
+                text: "Copy All";
+                clicked => { root.copy-all-clicked(); }
+            }
+        }
+
+        if show-raw-view: ScrollView {
+            vertical-stretch: 1;
+
+            TextInput {
+                text: raw-info-text;
+                font-size: 14px * root.zoom;
+                color: #cdd6f4;
+                wrap: word-wrap;
+                read-only: true;
+                single-line: false;
+            }
+        }
+
+        if !show-raw-view: ScrollView {
             vertical-stretch: 1;
 
             VerticalBox {
@@ -136,6 +173,7 @@ export component AppWindow inherits Window {
                             wrap: word-wrap;
                             read-only: true;
                             single-line: false;
+                            text-cursor-width: 0px;
                         }
 
                         TextInput {
@@ -146,6 +184,7 @@ export component AppWindow inherits Window {
                             horizontal-stretch: 1;
                             read-only: true;
                             single-line: false;
+                            text-cursor-width: 0px;
                         }
                     }
                 }
