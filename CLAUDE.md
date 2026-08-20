@@ -9,8 +9,8 @@ It has to be cross-platform (works with Mac and Windows)
 
 ## Commands
 
-- Build: `cargo build --release`
-- Run: `cargo run --release`
+- Build: `cargo build`
+- Run: `cargo run`
 - Release build: `cargo build --release`
 - Check without building: `cargo check`
 - Package as `.app`/`.dmg` (macOS): `cargo packager --release` (uses `[package.metadata.packager]` in [Cargo.toml](Cargo.toml); runs `cargo build --release` first via `before-packaging-command`)

@@ -18,6 +18,7 @@ export component AppWindow inherits Window {
     min-width: 480px;
     min-height: 420px;
     background: #11111b;
+    default-font-size: 16px * root.zoom;
 
     in-out property <bool> has-file: false;
     in-out property <bool> is-drag-hover: false;
@@ -89,7 +90,6 @@ export component AppWindow inherits Window {
                 Text {
                     text: has-file ? file-name : "Drag & drop a video file here";
                     color: #cdd6f4;
-                    font-size: 16px * root.zoom;
                     horizontal-alignment: center;
                     wrap: word-wrap;
                 }
@@ -113,11 +113,10 @@ export component AppWindow inherits Window {
             visible: status-text != "";
             text: status-text;
             color: is-error ? #f38ba8 : #a6adc8;
-            font-size: 13px * root.zoom;
+            font-size: 14px * root.zoom;
             wrap: word-wrap;
             read-only: true;
             single-line: false;
-            text-cursor-width: 0px;
         }
 
         HorizontalBox {
@@ -139,13 +138,27 @@ export component AppWindow inherits Window {
         if show-raw-view: ScrollView {
             vertical-stretch: 1;
 
-            TextInput {
-                text: raw-info-text;
-                font-size: 14px * root.zoom;
-                color: #cdd6f4;
-                wrap: word-wrap;
-                read-only: true;
-                single-line: false;
+            VerticalBox {
+                padding: 0px;
+                alignment: start;
+
+                Rectangle {
+                    background: #313244;
+                    border-radius: 8px;
+
+                    VerticalBox {
+                        padding: 12px * root.zoom;
+
+                        TextInput {
+                            text: raw-info-text;
+                            font-family: "Courier New";
+                            color: #cdd6f4;
+                            wrap: word-wrap;
+                            read-only: true;
+                            single-line: false;
+                        }
+                    }
+                }
             }
         }
 
@@ -166,25 +179,21 @@ export component AppWindow inherits Window {
 
                         TextInput {
                             text: row.label;
-                            font-size: 14px * root.zoom;
                             font-weight: 600;
                             color: #89b4fa;
                             width: 150px * root.zoom;
                             wrap: word-wrap;
                             read-only: true;
                             single-line: false;
-                            text-cursor-width: 0px;
                         }
 
                         TextInput {
                             text: row.value;
-                            font-size: 14px * root.zoom;
                             color: #cdd6f4;
                             wrap: word-wrap;
                             horizontal-stretch: 1;
                             read-only: true;
                             single-line: false;
-                            text-cursor-width: 0px;
                         }
                     }
                 }
