@@ -65,107 +65,97 @@ export component AppWindow inherits Window {
         }
     }
 
-    VerticalBox {
-        padding: 18px * root.zoom;
-        spacing: 12px * root.zoom;
+    ScrollView {
+        VerticalBox {
+            padding: 18px * root.zoom;
+            spacing: 12px * root.zoom;
+            alignment: start;
 
-        Text {
-            text: "Video Info";
-            font-size: 22px * root.zoom;
-            font-weight: 700;
-            color: #cdd6f4;
-        }
-
-        Rectangle {
-            height: (has-file ? 84px : 170px) * root.zoom;
-            border-radius: 12px;
-            border-width: 2px;
-            border-color: is-drag-hover ? #89b4fa : #45475a;
-            background: is-drag-hover ? #1e2030 : #181825;
-
-            VerticalBox {
-                alignment: center;
-                spacing: 4px * root.zoom;
-
-                Text {
-                    text: has-file ? file-name : "Drag & drop a video file here";
-                    color: #cdd6f4;
-                    horizontal-alignment: center;
-                    wrap: word-wrap;
-                }
-
-                Text {
-                    visible: !has-file;
-                    text: "or use the button below";
-                    color: #a6adc8;
-                    font-size: 13px * root.zoom;
-                    horizontal-alignment: center;
-                }
-            }
-        }
-
-        Button {
-            text: "Browse for video...";
-            clicked => { root.browse-clicked(); }
-        }
-
-        TextInput {
-            visible: status-text != "";
-            text: status-text;
-            color: is-error ? #f38ba8 : #a6adc8;
-            font-size: 14px * root.zoom;
-            wrap: word-wrap;
-            read-only: true;
-            single-line: false;
-        }
-
-        HorizontalBox {
-            visible: info-rows.length > 0;
-            padding: 0px;
-            alignment: end;
-
-            Switch {
-                text: "Raw Text View";
-                checked <=> root.show-raw-view;
+            Text {
+                text: "Video Info";
+                font-size: 22px * root.zoom;
+                font-weight: 700;
+                color: #cdd6f4;
             }
 
-            Button {
-                text: "Copy All";
-                clicked => { root.copy-all-clicked(); }
-            }
-        }
+            Rectangle {
+                height: (has-file ? 84px : 170px) * root.zoom;
+                border-radius: 12px;
+                border-width: 2px;
+                border-color: is-drag-hover ? #89b4fa : #45475a;
+                background: is-drag-hover ? #1e2030 : #181825;
 
-        if show-raw-view: ScrollView {
-            vertical-stretch: 1;
+                VerticalBox {
+                    alignment: center;
+                    spacing: 4px * root.zoom;
 
-            VerticalBox {
-                padding: 0px;
-                alignment: start;
+                    Text {
+                        text: has-file ? file-name : "Drag & drop a video file here";
+                        color: #cdd6f4;
+                        horizontal-alignment: center;
+                        wrap: word-wrap;
+                    }
 
-                if info-rows.length > 0: Rectangle {
-                    background: #313244;
-                    border-radius: 8px;
-
-                    VerticalBox {
-                        padding: 12px * root.zoom;
-
-                        TextInput {
-                            text: raw-info-text;
-                            font-family: "Courier New";
-                            color: #cdd6f4;
-                            wrap: word-wrap;
-                            read-only: true;
-                            single-line: false;
-                        }
+                    Text {
+                        visible: !has-file;
+                        text: "or use the button below";
+                        color: #a6adc8;
+                        font-size: 13px * root.zoom;
+                        horizontal-alignment: center;
                     }
                 }
             }
-        }
 
-        if !show-raw-view: ScrollView {
-            vertical-stretch: 1;
+            Button {
+                text: "Browse for video...";
+                clicked => { root.browse-clicked(); }
+            }
 
-            VerticalBox {
+            TextInput {
+                visible: status-text != "";
+                text: status-text;
+                color: is-error ? #f38ba8 : #a6adc8;
+                font-size: 14px * root.zoom;
+                wrap: word-wrap;
+                read-only: true;
+                single-line: false;
+            }
+
+            HorizontalBox {
+                visible: info-rows.length > 0;
+                padding: 0px;
+                alignment: end;
+
+                Switch {
+                    text: "Raw Text View";
+                    checked <=> root.show-raw-view;
+                }
+
+                Button {
+                    text: "Copy All";
+                    clicked => { root.copy-all-clicked(); }
+                }
+            }
+
+            if show-raw-view && info-rows.length > 0: Rectangle {
+                background: #313244;
+                border-radius: 8px;
+
+                VerticalBox {
+                    padding: 12px * root.zoom;
+
+                    TextInput {
+                        text: raw-info-text;
+                        font-family: "Courier New";
+                        color: #cdd6f4;
+                        wrap: word-wrap;
+                        read-only: true;
+                        single-line: false;
+                    }
+                }
+            }
+
+            if !show-raw-view: VerticalBox {
                 padding: 0px;
                 spacing: 6px * root.zoom;
 
