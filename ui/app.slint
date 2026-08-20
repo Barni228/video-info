@@ -12,14 +12,29 @@ export struct InfoRow {
     value: string,
 }
 
+// Define my own Catppuccin Mocha (dark) / Latte (light) theme, instead of
+// using the default style's neutral Palette colors.
+global Theme {
+    out property <bool> is-dark: Palette.color-scheme == ColorScheme.dark;
+    out property <color> surface-background: is-dark ? #11111b : #eff1f5;
+    out property <color> panel-background: is-dark ? #181825 : #e6e9ef;
+    out property <color> hover-background: is-dark ? #1e2030 : #ccd0da;
+    out property <color> raw-view-background: is-dark ? #313244 : #ccd0da;
+    out property <color> border-color: is-dark ? #45475a : #bcc0cc;
+    out property <color> text-color: is-dark ? #cdd6f4 : #4c4f69;
+    out property <color> secondary-text-color: is-dark ? #a6adc8 : #6c6f85;
+    out property <color> accent-color: is-dark ? #89b4fa : #1e66f5;
+    out property <color> error-color: is-dark ? #f38ba8 : #d20f39;
+}
+
 export component AppWindow inherits Window {
     title: "Video Info";
     preferred-width: 640px;
     preferred-height: 580px;
     min-width: 480px;
     min-height: 420px;
-    background: Palette.background;
     default-font-size: 16px * root.zoom;
+    background: Theme.surface-background;
 
     in-out property <bool> has-file: false;
     in-out property <bool> is-drag-hover: false;
@@ -87,15 +102,15 @@ export component AppWindow inherits Window {
                     text: "Video Info";
                     font-size: 22px * root.zoom;
                     font-weight: 700;
-                    color: Palette.foreground;
+                    color: Theme.text-color;
                 }
 
                 Rectangle {
                     height: (has-file ? 84px : 170px) * root.zoom;
                     border-radius: 12px;
                     border-width: 2px;
-                    border-color: is-drag-hover ? Palette.accent-background : Palette.border;
-                    background: is-drag-hover ? Palette.control-background : Palette.alternate-background;
+                    border-color: is-drag-hover ? Theme.accent-color : Theme.border-color;
+                    background: is-drag-hover ? Theme.hover-background : Theme.panel-background;
 
                     VerticalBox {
                         alignment: center;
@@ -103,7 +118,7 @@ export component AppWindow inherits Window {
 
                         Text {
                             text: has-file ? file-name : "Drag & drop a file here";
-                            color: Palette.foreground;
+                            color: Theme.text-color;
                             horizontal-alignment: center;
                             wrap: word-wrap;
                         }
@@ -111,8 +126,7 @@ export component AppWindow inherits Window {
                         Text {
                             visible: !has-file;
                             text: "or use the button below";
-                            color: Palette.foreground;
-                            opacity: 0.7;
+                            color: Theme.secondary-text-color;
                             font-size: 13px * root.zoom;
                             horizontal-alignment: center;
                         }
@@ -127,8 +141,7 @@ export component AppWindow inherits Window {
                 TextInput {
                     visible: status-text != "";
                     text: status-text;
-                    color: is-error ? #e64553 : Palette.foreground;
-                    opacity: is-error ? 1.0 : 0.7;
+                    color: is-error ? Theme.error-color : Theme.secondary-text-color;
                     font-size: 14px * root.zoom;
                     wrap: word-wrap;
                     read-only: true;
@@ -152,7 +165,7 @@ export component AppWindow inherits Window {
                 }
 
                 if show-raw-view && info-rows.length > 0: Rectangle {
-                    background: Palette.alternate-background;
+                    background: Theme.raw-view-background;
                     border-radius: 8px;
 
                     VerticalBox {
@@ -161,7 +174,7 @@ export component AppWindow inherits Window {
                         TextInput {
                             text: raw-info-text;
                             font-family: "Courier New";
-                            color: Palette.foreground;
+                            color: Theme.text-color;
                             wrap: word-wrap;
                             read-only: true;
                             single-line: false;
@@ -174,7 +187,7 @@ export component AppWindow inherits Window {
                     spacing: 6px * root.zoom;
 
                     for row in info-rows: Rectangle {
-                        background: Palette.alternate-background;
+                        background: Theme.panel-background;
                         border-radius: 6px;
 
                         HorizontalBox {
@@ -184,7 +197,7 @@ export component AppWindow inherits Window {
                             TextInput {
                                 text: row.label;
                                 font-weight: 600;
-                                color: Palette.accent-background;
+                                color: Theme.accent-color;
                                 width: 150px * root.zoom;
                                 wrap: word-wrap;
                                 read-only: true;
@@ -193,7 +206,7 @@ export component AppWindow inherits Window {
 
                             TextInput {
                                 text: row.value;
-                                color: Palette.foreground;
+                                color: Theme.text-color;
                                 wrap: word-wrap;
                                 horizontal-stretch: 1;
                                 read-only: true;

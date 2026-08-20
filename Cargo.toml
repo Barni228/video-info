@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 # unstable-winit-030 gives us access to raw winit window events (WindowEvent::DroppedFile)
 # so we can support native OS drag-and-drop of files onto the window.
-slint = { version = "1.9", features = ["unstable-winit-030"] }
+slint = { version = "1.17", features = ["unstable-winit-030"] }
 # os file-picker dialog
 rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
@@ -16,7 +16,7 @@ serde_json = "1"
 copypasta = "0.10"
 
 [build-dependencies]
-slint-build = "1.9"
+slint-build = "1.17"
 
 [package.metadata.packager]
 product-name = "Video Info"
