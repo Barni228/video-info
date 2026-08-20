@@ -90,7 +90,7 @@ export component AppWindow inherits Window {
                     spacing: 4px * root.zoom;
 
                     Text {
-                        text: has-file ? file-name : "Drag & drop a video file here";
+                        text: has-file ? file-name : "Drag & drop a file here";
                         color: #cdd6f4;
                         horizontal-alignment: center;
                         wrap: word-wrap;
@@ -107,7 +107,7 @@ export component AppWindow inherits Window {
             }
 
             Button {
-                text: "Browse for video...";
+                text: "Browse for file...";
                 clicked => { root.browse-clicked(); }
             }
 

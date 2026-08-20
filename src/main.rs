@@ -135,12 +135,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.on_browse_clicked(move || {
             let app_weak = app_weak.clone();
             let file = rfd::FileDialog::new()
-                .set_title("Choose a video file")
+                .set_title("Choose a file")
                 .add_filter(
                     "Video files",
                     &[
                         "mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v", "mpg", "mpeg",
                         "ts", "3gp", "ogv",
+                    ],
+                )
+                .add_filter(
+                    "Audio files",
+                    &[
+                        "mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "wma", "aiff",
                     ],
                 )
                 .add_filter("All files", &["*"])
