@@ -32,8 +32,12 @@ category = "Utility"
 # package, placing the binary next to the app's own executable.
 external-binaries = ["binaries/ffprobe"]
 
-# Registers Video Inspector as an "Open With" option for these video extensions.
-# On macOS this becomes CFBundleDocumentTypes in Info.plist.
+# Registers Video Inspector as an "Open With" option for these video/audio
+# extensions. On macOS this becomes CFBundleDocumentTypes in Info.plist; on
+# Windows, file-association registry entries. `file-associations` is a Vec
+# under the hood, so multiple `[[...]]` blocks are supported and append to
+# it rather than overwrite it -- kept as two blocks (video/audio) so each
+# gets its own descriptive `name`.
 [[package.metadata.packager.file-associations]]
 extensions = [
     "mp4",
@@ -48,6 +52,21 @@ extensions = [
     "wmv",
 ]
 name = "Video File"
+role = "viewer"
+
+[[package.metadata.packager.file-associations]]
+extensions = [
+    "mp3",
+    "wav",
+    "flac",
+    "aac",
+    "m4a",
+    "ogg",
+    "opus",
+    "wma",
+    "aiff",
+]
+name = "Audio File"
 role = "viewer"
 
 [package.metadata.packager.macos]
