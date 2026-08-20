@@ -9,10 +9,12 @@ slint::include_modules!();
 #[cfg(target_os = "macos")]
 mod macos_open;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use slint::{ModelRc, VecModel, Weak};
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::rc::Rc;
 
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use std::collections::HashMap;
@@ -64,6 +66,114 @@ struct FormatInfo {
     bit_rate: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ThemeSetting {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl ThemeSetting {
+    // Index into the Settings window's theme ComboBox model
+    // (["System", "Light", "Dark"]).
+    fn to_index(self) -> i32 {
+        match self {
+            ThemeSetting::System => 0,
+            ThemeSetting::Light => 1,
+            ThemeSetting::Dark => 2,
+        }
+    }
+
+    fn from_label(label: &str) -> Self {
+        match label {
+            "Light" => ThemeSetting::Light,
+            "Dark" => ThemeSetting::Dark,
+            _ => ThemeSetting::System,
+        }
+    }
+
+    fn to_mode(self) -> ThemeMode {
+        match self {
+            ThemeSetting::System => ThemeMode::System,
+            ThemeSetting::Light => ThemeMode::Light,
+            ThemeSetting::Dark => ThemeMode::Dark,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+struct Settings {
+    font_size: f32,
+    theme: ThemeSetting,
+    always_on_top: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            font_size: 16.0,
+            theme: ThemeSetting::default(),
+            always_on_top: false,
+        }
+    }
+}
+
+/// Cross-platform settings storage location: `%APPDATA%\Video Info` on
+/// Windows, `~/Library/Application Support/Video Info` on macOS.
+fn settings_path() -> Option<PathBuf> {
+    let dir = if cfg!(target_os = "windows") {
+        std::env::var_os("APPDATA").map(PathBuf::from)
+    } else if cfg!(target_os = "macos") {
+        std::env::var_os("HOME").map(|home| PathBuf::from(home).join("Library/Application Support"))
+    } else {
+        std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config"))
+    };
+    dir.map(|d| d.join("Video Info").join("settings.json"))
+}
+
+fn load_settings() -> Settings {
+    settings_path()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+fn save_settings(settings: &Settings) {
+    let Some(path) = settings_path() else {
+        return;
+    };
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(json) = serde_json::to_string_pretty(settings) {
+        let _ = std::fs::write(path, json);
+    }
+}
+
+/// The OS's current color scheme, used to resolve `ThemeSetting::System`.
+fn system_is_dark(app: &AppWindow) -> bool {
+    app.window()
+        .with_winit_window(|w| w.theme() == Some(winit::window::Theme::Dark))
+        .unwrap_or(false)
+}
+
+/// Push `theme` into the `Theme` global (see app.slint) on both windows --
+/// each top-level component gets its own independent copy of the globals
+/// it uses, so both need to be kept in sync.
+fn apply_theme(app: &AppWindow, settings_window: &SettingsWindow, theme: ThemeSetting) {
+    let mode = theme.to_mode();
+    let is_dark = system_is_dark(app);
+    app.global::<Theme>().set_mode(mode);
+    app.global::<Theme>().set_system_is_dark(is_dark);
+    settings_window.global::<Theme>().set_mode(mode);
+    settings_window
+        .global::<Theme>()
+        .set_system_is_dark(is_dark);
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Make sure the winit-backed platform is selected so we can hook raw window events
     // (needed for native OS drag-and-drop of files).
@@ -75,6 +185,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let open_doc_rx = macos_open::take_receiver();
 
     let app = AppWindow::new()?;
+    let settings = Rc::new(RefCell::new(load_settings()));
+
+    app.set_base_font_size(settings.borrow().font_size);
+    app.set_keep_on_top(settings.borrow().always_on_top);
+
+    let settings_window = SettingsWindow::new()?;
+    settings_window.set_font_size(settings.borrow().font_size);
+    settings_window.set_theme_index(settings.borrow().theme.to_index());
+    settings_window.set_keep_on_top(settings.borrow().always_on_top);
+
+    // Closing the main window doesn't quit the app on its own while the
+    // Settings window is still shown -- it keeps its own strong reference
+    // alive. Close it too so the app actually exits.
+    {
+        let settings_window_weak = settings_window.as_weak();
+        app.window().on_close_requested(move || {
+            if let Some(settings_window) = settings_window_weak.upgrade() {
+                let _ = settings_window.hide();
+            }
+            slint::CloseRequestResponse::HideWindow
+        });
+    }
+
+    // Apply the initial theme once the event loop is running: resolving
+    // ThemeSetting::System needs the winit window, which only exists once
+    // the loop is pumping (see WinitWindowAccessor's docs).
+    {
+        let app_weak = app.as_weak();
+        let settings_window_weak = settings_window.as_weak();
+        let theme = settings.borrow().theme;
+        let _ = slint::invoke_from_event_loop(move || {
+            if let (Some(app), Some(settings_window)) =
+                (app_weak.upgrade(), settings_window_weak.upgrade())
+            {
+                apply_theme(&app, &settings_window, theme);
+            }
+        });
+    }
 
     // --- macOS "Open With" / already-running file-open support ---
     // Must come after AppWindow::new(), since it needs winit to have already
@@ -101,6 +249,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- Native OS drag & drop support ---
     {
         let app_weak = app.as_weak();
+        let settings_window_weak = settings_window.as_weak();
+        let settings = settings.clone();
         app.window().on_winit_window_event(move |_window, event| {
             match event {
                 WinitWindowEvent::HoveredFile(_) => {
@@ -118,6 +268,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         app.set_is_drag_hover(false);
                     }
                     analyze_file(&app_weak, path.clone());
+                }
+                WinitWindowEvent::ThemeChanged(_) => {
+                    if let (Some(app), Some(settings_window)) =
+                        (app_weak.upgrade(), settings_window_weak.upgrade())
+                        && settings.borrow().theme == ThemeSetting::System
+                    {
+                        apply_theme(&app, &settings_window, ThemeSetting::System);
+                    }
                 }
                 _ => {}
             }
@@ -166,6 +324,66 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     app.get_raw_info_text().to_string(),
                 );
             }
+        });
+    }
+
+    // --- Settings menu item / window ---
+    {
+        let settings_window_weak = settings_window.as_weak();
+        app.on_settings_clicked(move || {
+            if let Some(settings_window) = settings_window_weak.upgrade() {
+                let _ = settings_window.show();
+                // Work around the window sometimes staying blank until the
+                // first resize when it's shown long after being created:
+                // request a redraw on the next event loop tick, after the
+                // OS has finished mapping the window.
+                let settings_window_weak = settings_window.as_weak();
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(settings_window) = settings_window_weak.upgrade() {
+                        settings_window.window().request_redraw();
+                    }
+                });
+                // note: I tried and this line alone fixed the issue same way as the code above,
+                // so i dont know which one is better
+                // settings_window.window().request_redraw();
+            }
+        });
+    }
+    {
+        let app_weak = app.as_weak();
+        let settings = settings.clone();
+        settings_window.on_font_size_changed(move |value| {
+            if let Some(app) = app_weak.upgrade() {
+                app.set_base_font_size(value);
+            }
+            settings.borrow_mut().font_size = value;
+            save_settings(&settings.borrow());
+        });
+    }
+    {
+        let app_weak = app.as_weak();
+        let settings_window_weak = settings_window.as_weak();
+        let settings = settings.clone();
+        settings_window.on_theme_changed(move |label| {
+            let theme = ThemeSetting::from_label(&label);
+            if let (Some(app), Some(settings_window)) =
+                (app_weak.upgrade(), settings_window_weak.upgrade())
+            {
+                apply_theme(&app, &settings_window, theme);
+            }
+            settings.borrow_mut().theme = theme;
+            save_settings(&settings.borrow());
+        });
+    }
+    {
+        let app_weak = app.as_weak();
+        let settings = settings.clone();
+        settings_window.on_keep_on_top_changed(move |value| {
+            if let Some(app) = app_weak.upgrade() {
+                app.set_keep_on_top(value);
+            }
+            settings.borrow_mut().always_on_top = value;
+            save_settings(&settings.borrow());
         });
     }
 

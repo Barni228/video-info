@@ -1,7 +1,8 @@
 import {
     Button,
-    Palette,
+    ComboBox,
     ScrollView,
+    Slider,
     Switch,
     VerticalBox,
     HorizontalBox,
@@ -12,10 +13,17 @@ export struct InfoRow {
     value: string,
 }
 
+export enum ThemeMode { System, Light, Dark }
+
 // Define my own Catppuccin Mocha (dark) / Latte (light) theme, instead of
 // using the default style's neutral Palette colors.
-global Theme {
-    out property <bool> is-dark: Palette.color-scheme == ColorScheme.dark;
+export global Theme {
+    // Set by Rust: the user's theme preference (from Settings), and, when
+    // mode is System, the OS's current color scheme -- kept in sync via
+    // winit's WindowEvent::ThemeChanged.
+    in-out property <ThemeMode> mode: ThemeMode.System;
+    in-out property <bool> system-is-dark: false;
+    out property <bool> is-dark: mode == ThemeMode.Dark ? true : mode == ThemeMode.Light ? false : system-is-dark;
     out property <color> surface-background: is-dark ? #11111b : #eff1f5;
     out property <color> panel-background: is-dark ? #181825 : #e6e9ef;
     out property <color> hover-background: is-dark ? #1e2030 : #ccd0da;
@@ -33,8 +41,9 @@ export component AppWindow inherits Window {
     preferred-height: 580px;
     min-width: 480px;
     min-height: 420px;
-    default-font-size: 16px * root.zoom;
+    default-font-size: root.base-font-size * 1px * root.zoom;
     background: Theme.surface-background;
+    always-on-top: root.keep-on-top;
 
     in-out property <bool> has-file: false;
     in-out property <bool> is-drag-hover: false;
@@ -52,12 +61,26 @@ export component AppWindow inherits Window {
     // page zoom. 1.0 = 100%. Controlled by the View menu / Cmd +/-/0.
     in-out property <float> zoom: 1.0;
 
+    // Persisted settings (loaded/saved by Rust), applied here as the base
+    // that zoom multiplies on top of / the actual window behavior.
+    in-out property <float> base-font-size: 16.0;
+    in-out property <bool> keep-on-top: false;
+
     callback browse-clicked();
     callback copy-all-clicked();
+    callback settings-clicked();
 
     MenuBar {
         Menu {
             title: "View";
+
+            MenuItem {
+                title: "Settings…";
+                shortcut: @keys(Control + Comma);
+                activated => { root.settings-clicked(); }
+            }
+
+            MenuSeparator {}
 
             MenuItem {
                 title: "Zoom In";
@@ -215,6 +238,165 @@ export component AppWindow inherits Window {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// Icon-only "restore to default" button. Callers control visibility by
+// binding it to whether the setting currently differs from its default.
+component ResetButton {
+    callback clicked();
+
+    width: 20px;
+    height: 20px;
+
+    accessible-role: button;
+    accessible-label: "Reset to default";
+    accessible-action-default => { root.clicked(); }
+
+    TouchArea {
+        clicked => { root.clicked(); }
+
+        Text {
+            text: "↺";
+            font-size: 16px;
+            color: parent.has-hover ? Theme.accent-color : Theme.secondary-text-color;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component SettingsWindow inherits Window {
+    title: "Settings";
+    preferred-width: 340px;
+    preferred-height: 220px;
+    min-width: 340px;
+    min-height: 220px;
+    background: Theme.surface-background;
+    always-on-top: true;
+
+    in-out property <float> font-size: 16.0;
+    // Index into the ComboBox's model below (System/Light/Dark). Bound via
+    // current-index rather than current-value: writing current-value
+    // doesn't update the ComboBox's visual selection in this Slint version.
+    // https://github.com/slint-ui/slint/issues/11970
+    in-out property <int> theme-index: 0;
+    in-out property <bool> keep-on-top: false;
+
+    // Must match Settings::default() in main.rs.
+    property <float> font-size-default: 16.0;
+    property <int> theme-index-default: 0;
+
+    callback font-size-changed(float);
+    callback theme-changed(string);
+    callback keep-on-top-changed(bool);
+
+    VerticalBox {
+        padding: 18px;
+        spacing: 16px;
+        alignment: start;
+
+        Text {
+            text: "Settings";
+            font-size: 18px;
+            font-weight: 700;
+            color: Theme.text-color;
+        }
+
+        VerticalBox {
+            padding: 0px;
+            spacing: 4px;
+
+            HorizontalBox {
+                padding: 0px;
+
+                Text {
+                    text: "Default font size";
+                    color: Theme.text-color;
+                    horizontal-stretch: 1;
+                }
+
+                ResetButton {
+                    visible: root.font-size != root.font-size-default;
+                    clicked => {
+                        root.font-size = root.font-size-default;
+                        root.font-size-changed(root.font-size-default);
+                    }
+                }
+            }
+
+            HorizontalBox {
+                padding: 0px;
+                spacing: 8px;
+
+                Slider {
+                    minimum: 12;
+                    maximum: 24;
+                    step: 1;
+                    value <=> root.font-size;
+                    changed(v) => { root.font-size-changed(v); }
+                }
+
+                Text {
+                    text: round(root.font-size) + " px";
+                    color: Theme.secondary-text-color;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        VerticalBox {
+            padding: 0px;
+            spacing: 4px;
+
+            HorizontalBox {
+                padding: 0px;
+
+                Text {
+                    text: "Theme";
+                    color: Theme.text-color;
+                    horizontal-stretch: 1;
+                }
+
+                ResetButton {
+                    visible: root.theme-index != root.theme-index-default;
+                    clicked => {
+                        root.theme-index = root.theme-index-default;
+                        root.theme-changed("System");
+                    }
+                }
+            }
+
+            ComboBox {
+                model: ["System", "Light", "Dark"];
+                current-index <=> root.theme-index;
+                selected(v) => { root.theme-changed(v); }
+            }
+        }
+
+        HorizontalBox {
+            padding: 0px;
+
+            Text {
+                text: "Always on top";
+                color: Theme.text-color;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            ResetButton {
+                visible: root.keep-on-top;
+                clicked => {
+                    root.keep-on-top = false;
+                    root.keep-on-top-changed(false);
+                }
+            }
+
+            Switch {
+                checked <=> root.keep-on-top;
+                toggled => { root.keep-on-top-changed(root.keep-on-top); }
             }
         }
     }
