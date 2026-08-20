@@ -1,65 +1,24 @@
 // macos_open.rs
 //
-// Catches the file(s) macOS opened this app with -- both a fresh Finder
-// "Open With" launch and a file opened while the app is already running --
-// via a single mechanism: AppKit's `application:openURLs:` delegate method.
-// That method is Apple's documented replacement for the old odoc/openFile(s)
-// Apple Events and fires for both cases; there's no need for a second,
-// separate handler for the "already running" case.
-//
-// The obvious way to receive it -- installing our own NSApplicationDelegate
-// via `app.setDelegate(...)` -- crashes, because winit 0.30.13 (what Slint
-// currently pulls in) registers its own internal delegate and swizzles
-// NSApplication's `sendEvent:` in a way that assumes its own delegate object
-// is still in place; replacing it panics deep in winit's event dispatch on
-// the very next event (confirmed, currently-open upstream bug:
-// https://github.com/rust-windowing/winit/issues/4458).
-//
-// So instead of replacing the delegate object, we leave winit's own delegate
-// object in place (satisfying whatever internal checks it does) and use the
-// Objective-C runtime to add an `application:openURLs:` method directly onto
-// *its* class at runtime ("method swizzling" / dynamic patching -- a
-// standard, decades-old ObjC technique for exactly this "I need to teach an
-// existing delegate a new trick" situation). `class_addMethod` is
-// well-defined for adding a method to an already-registered class; it
-// doesn't require the class to be freshly declared.
-//
-// Everything here is done via raw C FFI against libobjc, deliberately
-// avoiding the objc2 crate family, to avoid a repeat of the winit-delegate
-// situation.
+// Catches the file(s) macOS opened this app with (Finder "Open With", or a
+// file opened while already running) via AppKit's `application:openURLs:`
+// delegate method. We can't install our own NSApplicationDelegate (winit
+// 0.30.13 already sets its own and crashes if replaced -- see
+// https://github.com/rust-windowing/winit/issues/4458), so instead we use
+// the Objective-C runtime to add `application:openURLs:` directly onto
+// winit's existing delegate class at runtime ("method swizzling"), via raw
+// C FFI against libobjc.
 //
 // Ported from https://github.com/Barni228/slint_mac_open_with, adapted so
 // `report_paths` forwards a single path at a time (matching this app's
 // one-file-at-a-time `analyze_file` flow) instead of joining multiple
 // selected files into one comma-separated display string.
-//
-// Logging: every step below is logged both to stderr AND to a plain log
-// file at ~/Library/Logs/video-inspector-open-with.log. When Finder/Launch
-// Services cold-launches the app, the new process has no terminal attached
-// at all -- stderr from that instance won't show up anywhere you're
-// watching unless you tail the log file instead:
-//   tail -f ~/Library/Logs/video-inspector-open-with.log
 
 #![cfg(target_os = "macos")]
 
 use std::ffi::{CStr, CString, c_char, c_void};
-use std::io::Write;
 use std::sync::OnceLock;
 use std::sync::mpsc::{Receiver, Sender, channel};
-
-pub fn log_line(msg: &str) {
-    eprintln!("{msg}");
-    let _ = (|| -> std::io::Result<()> {
-        let home = std::env::var("HOME").map_err(|_| std::io::ErrorKind::NotFound)?;
-        let log_dir = std::path::Path::new(&home).join("Library/Logs");
-        std::fs::create_dir_all(&log_dir)?;
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(log_dir.join("video-inspector-open-with.log"))?;
-        writeln!(file, "{msg}")
-    })();
-}
 
 static FILE_OPENED_SENDER: OnceLock<Sender<String>> = OnceLock::new();
 
@@ -134,27 +93,21 @@ pub fn install_open_urls_swizzle() {
         let ns_application_class_name = CString::new("NSApplication").unwrap();
         let ns_app_class = objc_getClass(ns_application_class_name.as_ptr());
         if ns_app_class.is_null() {
-            log_line("[macos_open] (swizzle) could not find NSApplication class");
             return;
         }
 
         let shared_app: Id = msg_send0(ns_app_class, sel("sharedApplication"));
         if shared_app.is_null() {
-            log_line("[macos_open] (swizzle) sharedApplication returned nil");
             return;
         }
 
         let delegate: Id = msg_send0(shared_app, sel("delegate"));
         if delegate.is_null() {
-            log_line(
-                "[macos_open] (swizzle) NSApp has no delegate yet - call this after AppWindow::new()",
-            );
             return;
         }
 
         let delegate_class = object_getClass(delegate);
         if delegate_class.is_null() {
-            log_line("[macos_open] (swizzle) could not get delegate's class");
             return;
         }
 
@@ -162,12 +115,8 @@ pub fn install_open_urls_swizzle() {
         // "v@:@@" = void return; self, _cmd, and two object args.
         let types = CString::new("v@:@@").unwrap();
         let imp: Imp = std::mem::transmute(application_open_urls as *const ());
-        let added = class_addMethod(delegate_class, selector, imp, types.as_ptr());
+        class_addMethod(delegate_class, selector, imp, types.as_ptr());
         std::mem::forget(types);
-
-        log_line(&format!(
-            "[macos_open] (swizzle) class_addMethod application:openURLs: -> added={added}"
-        ));
     }
 }
 
@@ -177,19 +126,15 @@ pub fn install_open_urls_swizzle() {
 ///
 /// Wrapped in catch_unwind: this is called directly by AppKit across the ObjC
 /// ABI boundary, and Rust aborts the whole process if a panic unwinds past an
-/// `extern "C" fn` -- better to log and drop this one event than take the app
-/// down over a single unexpected URL.
+/// `extern "C" fn` -- better to drop this one event than take the app down
+/// over a single unexpected URL.
 extern "C" fn application_open_urls(_this: Id, _cmd: Sel, _application: Id, urls: Id) {
-    let result = std::panic::catch_unwind(|| unsafe {
+    let _ = std::panic::catch_unwind(|| unsafe {
         if urls.is_null() {
-            log_line("[macos_open] (swizzle) application:openURLs: called with nil array");
             return;
         }
 
         let count: u64 = msg_send0(urls, sel("count"));
-        log_line(&format!(
-            "[macos_open] (swizzle) application:openURLs: called with {count} url(s)"
-        ));
 
         let mut paths = Vec::new();
         for i in 0..count {
@@ -205,13 +150,9 @@ extern "C" fn application_open_urls(_this: Id, _cmd: Sel, _application: Id, urls
                 continue;
             }
             let path = CStr::from_ptr(ptr).to_string_lossy().into_owned();
-            log_line(&format!("[macos_open] (swizzle) url {i} -> {path}"));
             paths.push(path);
         }
 
         report_paths(paths);
     });
-    if result.is_err() {
-        log_line("[macos_open] application_open_urls panicked - see above for details");
-    }
 }

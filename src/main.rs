@@ -72,10 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .select()?;
 
     #[cfg(target_os = "macos")]
-    let open_doc_rx = {
-        macos_open::log_line("[main] process started");
-        macos_open::take_receiver()
-    };
+    let open_doc_rx = macos_open::take_receiver();
 
     let app = AppWindow::new()?;
 
@@ -86,7 +83,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // itself (see macos_open.rs for why).
     #[cfg(target_os = "macos")]
     {
-        macos_open::log_line("[main] AppWindow created");
         macos_open::install_open_urls_swizzle();
 
         let app_weak = app.as_weak();
