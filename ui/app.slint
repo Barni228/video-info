@@ -287,9 +287,9 @@ component ResetButton {
 export component SettingsWindow inherits Window {
     title: "Settings";
     preferred-width: 340px;
-    preferred-height: 220px;
+    preferred-height: 240px;
     min-width: 340px;
-    min-height: 220px;
+    min-height: 240px;
     background: Theme.surface-background;
     always-on-top: true;
     default-font-size: root.font-size * 1px;
@@ -310,127 +310,129 @@ export component SettingsWindow inherits Window {
     callback theme-changed(string);
     callback keep-on-top-changed(bool);
 
-    VerticalBox {
-        padding: 18px;
-        spacing: 16px;
-        alignment: start;
-
-        TextInput {
-            text: "Settings";
-            font-size: 18px * root.font-size / 16;
-            font-weight: 700;
-            color: Theme.text-color;
-            read-only: true;
-            single-line: true;
-        }
-
+    ScrollView {
         VerticalBox {
-            padding: 0px;
-            spacing: 4px;
-
-            HorizontalBox {
-                padding: 0px;
-
-                TextInput {
-                    text: "Default font size";
-                    color: Theme.text-color;
-                    horizontal-stretch: 1;
-                    read-only: true;
-                    single-line: true;
-                }
-
-                ResetButton {
-                    icon-size: root.font-size * 1px;
-                    visible: root.font-size != root.font-size-default;
-                    clicked => {
-                        root.font-size = root.font-size-default;
-                        root.font-size-changed(root.font-size-default);
-                    }
-                }
-            }
-
-            HorizontalBox {
-                padding: 0px;
-                spacing: 8px;
-
-                Slider {
-                    minimum: 12;
-                    maximum: 24;
-                    step: 1;
-                    value <=> root.font-size;
-                    // snap slight font size changes to whole numbers
-                    changed(v) => {
-                        root.font-size = round(v);
-                        root.font-size-changed(root.font-size);
-                    }
-                }
-
-                TextInput {
-                    text: round(root.font-size) + " px";
-                    color: Theme.secondary-text-color;
-                    vertical-alignment: center;
-                    read-only: true;
-                    single-line: true;
-                }
-            }
-        }
-
-        VerticalBox {
-            padding: 0px;
-            spacing: 4px;
-
-            HorizontalBox {
-                padding: 0px;
-
-                TextInput {
-                    text: "Theme";
-                    color: Theme.text-color;
-                    horizontal-stretch: 1;
-                    read-only: true;
-                    single-line: true;
-                }
-
-                ResetButton {
-                    icon-size: root.font-size * 1px;
-                    visible: root.theme-index != root.theme-index-default;
-                    clicked => {
-                        root.theme-index = root.theme-index-default;
-                        root.theme-changed("System");
-                    }
-                }
-            }
-
-            ComboBox {
-                model: ["System", "Light", "Dark"];
-                current-index <=> root.theme-index;
-                selected(v) => { root.theme-changed(v); }
-            }
-        }
-
-        HorizontalBox {
-            padding: 0px;
+            padding: 18px;
+            spacing: 16px;
+            alignment: start;
 
             TextInput {
-                text: "Always on top";
+                text: "Settings";
+                font-size: 18px * root.font-size / 16;
+                font-weight: 700;
                 color: Theme.text-color;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
                 read-only: true;
                 single-line: true;
             }
 
-            ResetButton {
-                icon-size: root.font-size * 1px;
-                visible: root.keep-on-top;
-                clicked => {
-                    root.keep-on-top = false;
-                    root.keep-on-top-changed(false);
+            VerticalBox {
+                padding: 0px;
+                spacing: 4px;
+
+                HorizontalBox {
+                    padding: 0px;
+
+                    TextInput {
+                        text: "Default font size";
+                        color: Theme.text-color;
+                        horizontal-stretch: 1;
+                        read-only: true;
+                        single-line: true;
+                    }
+
+                    ResetButton {
+                        icon-size: root.font-size * 1px;
+                        visible: root.font-size != root.font-size-default;
+                        clicked => {
+                            root.font-size = root.font-size-default;
+                            root.font-size-changed(root.font-size-default);
+                        }
+                    }
+                }
+
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 8px;
+
+                    Slider {
+                        minimum: 12;
+                        maximum: 24;
+                        step: 1;
+                        value <=> root.font-size;
+                        // snap slight font size changes to whole numbers
+                        changed(v) => {
+                            root.font-size = round(v);
+                            root.font-size-changed(root.font-size);
+                        }
+                    }
+
+                    TextInput {
+                        text: round(root.font-size) + " px";
+                        color: Theme.secondary-text-color;
+                        vertical-alignment: center;
+                        read-only: true;
+                        single-line: true;
+                    }
                 }
             }
 
-            Switch {
-                checked <=> root.keep-on-top;
-                toggled => { root.keep-on-top-changed(root.keep-on-top); }
+            VerticalBox {
+                padding: 0px;
+                spacing: 4px;
+
+                HorizontalBox {
+                    padding: 0px;
+
+                    TextInput {
+                        text: "Theme";
+                        color: Theme.text-color;
+                        horizontal-stretch: 1;
+                        read-only: true;
+                        single-line: true;
+                    }
+
+                    ResetButton {
+                        icon-size: root.font-size * 1px;
+                        visible: root.theme-index != root.theme-index-default;
+                        clicked => {
+                            root.theme-index = root.theme-index-default;
+                            root.theme-changed("System");
+                        }
+                    }
+                }
+
+                ComboBox {
+                    model: ["System", "Light", "Dark"];
+                    current-index <=> root.theme-index;
+                    selected(v) => { root.theme-changed(v); }
+                }
+            }
+
+            HorizontalBox {
+                padding: 0px;
+
+                TextInput {
+                    text: "Always on top";
+                    color: Theme.text-color;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    read-only: true;
+                    single-line: true;
+                }
+
+                ResetButton {
+                    icon-size: root.font-size * 1px;
+                    visible: root.keep-on-top;
+                    clicked => {
+                        root.keep-on-top = false;
+                        root.keep-on-top-changed(false);
+                    }
+                }
+
+                Switch {
+                    checked <=> root.keep-on-top;
+                    toggled => { root.keep-on-top-changed(root.keep-on-top); }
+                }
             }
         }
     }
