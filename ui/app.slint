@@ -251,7 +251,7 @@ export component AppWindow inherits Window {
 // binding it to whether the setting currently differs from its default.
 component ResetButton {
     callback clicked();
-    in property <length> icon-size: 16px;
+    in property <length> icon-size: 18px;
 
     width: root.icon-size + 4px;
     height: root.icon-size + 4px;
@@ -263,30 +263,23 @@ component ResetButton {
     TouchArea {
         clicked => { root.clicked(); }
 
-        property <brush> icon-color: self.has-hover ? Theme.accent-color : Theme.secondary-text-color;
-
-        // Draw the revert button
-        Path {
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            width: root.icon-size;
-            height: root.icon-size;
-            viewbox-width: 16;
-            viewbox-height: 16;
-            fill: parent.icon-color;
-            fill-rule: evenodd;
-            commands: "M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2z";
+        Rectangle {
+            background: parent.has-hover ? Theme.hover-background : transparent;
+            border-radius: 4px;
         }
 
-        Path {
+        // Bootstrap Icons' "arrow-counterclockwise"
+        // (https://icons.getbootstrap.com/icons/arrow-counterclockwise/),
+        // recolored via `colorize` rather than a Unicode arrow glyph: some
+        // fonts (notably on Windows) don't include one, which showed up
+        // as a missing-glyph box there.
+        Image {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             width: root.icon-size;
             height: root.icon-size;
-            viewbox-width: 16;
-            viewbox-height: 16;
-            fill: parent.icon-color;
-            commands: "M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466";
+            source: @image-url("icons/arrow-counterclockwise.svg");
+            colorize: parent.has-hover ? Theme.accent-color : Theme.secondary-text-color;
         }
     }
 }
