@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Video Info: a small Rust desktop app built with [Slint](https://slint.rs/) that shells out to `ffprobe` to display metadata (container, codecs, resolution, bitrate, chapters, subtitles) for a video file. The user picks a file via drag-and-drop onto the window or a native file-picker button.
+Video Info: a small Rust desktop app built with [Slint](https://slint.rs/) that shells out to `ffprobe` to display metadata (container, codecs, resolution, bitrate, chapters, subtitles) for a video / audio file.
 It has to be cross-platform (works with Mac and Windows)
 
 ## Commands
@@ -13,25 +13,32 @@ It has to be cross-platform (works with Mac and Windows)
 - Run: `cargo run`
 - Release build: `cargo build --release`
 - Check without building: `cargo check`
+- Test: `cargo test` (unit tests for the pure formatting/parsing helpers only — there is no UI test harness)
+- Lint: `cargo clippy --all-targets`
 - Package as `.app`/`.dmg` (macOS): `cargo packager --release` (uses `[package.metadata.packager]` in [Cargo.toml](Cargo.toml); runs `cargo build --release` first via `before-packaging-command`)
-
-There are no automated tests in this repo currently.
 
 ## Architecture
 
-The app is intentionally a two-file program:
+Data flows in one direction: a file arrives (drag-drop, file picker, "Open With", or CLI arg) → `ffprobe` is run on a background thread → its JSON is deserialized → that is flattened into label/value rows → the rows are pushed into the Slint UI.
 
-- **[src/main.rs](src/main.rs)** — all application logic:
+### Rust ([src/](src/))
 
-  - `main()` sets up the Slint window, selects the `winit` backend explicitly (required for native OS drag-and-drop via `WindowEvent::DroppedFile`), wires up the browse button, and handles the "opened via file association" case (`std::env::args().nth(1)`; noted as not yet working on macOS).
-  - `analyze_file()` is the entry point triggered by drag-drop, the browse dialog, or a CLI arg. It immediately updates UI state (filename, "Analyzing..." status) then spawns a background `std::thread` so `ffprobe` doesn't block the UI thread; the result is marshalled back via `slint::invoke_from_event_loop`.
-  - `run_ffprobe()` shells out to `ffprobe` (currently hardcoded to `/opt/homebrew/bin/ffprobe` rather than relying on `PATH` — see the commented-out line above it), parses the JSON output into `FfprobeOutput`/`StreamInfo`/`FormatInfo`/`ChapterInfo` structs via `serde`, and builds a flat `Vec<InfoRow>` (label/value pairs) for display. Video, audio, subtitle streams and chapters are each handled by dedicated blocks appending rows.
-  - Small formatting helpers: `human_duration`, `human_size`, `parse_fraction` (for parsing ffprobe's `"num/den"` frame-rate strings).
+- **[main.rs](src/main.rs)** — startup path only: select the `winit` backend (required for native OS drag-and-drop via `WindowEvent::DroppedFile`), create both windows, call `ui::wire`, handle the "opened via CLI arg" case, run the event loop.
+- **[settings.rs](src/settings.rs)** — the persisted `Settings` (font size, theme, always-on-top), where the JSON file lives per-platform, and `SettingsStore`, which holds them in memory and writes through to disk on every change. `ThemeSetting::ALL` is the single source of truth for the theme dropdown's contents and ordering — the Settings window gets its list from Rust rather than hardcoding one.
+- **[ffprobe.rs](src/ffprobe.rs)** — locating the `ffprobe` binary (preferring the copy bundled next to the executable, falling back to `PATH`), running it, and deserializing its JSON into `Report`/`Stream`/`Format`/`Chapter`. Raw fields mirror ffprobe's output; derived values (codec name, frame rate, bitrates) are accessor methods. `ffprobe::Error`'s `Display` text is what the UI shows the user.
+- **[report.rs](src/report.rs)** — turns a `Report` into the flat `Vec<InfoRow>` the UI displays, in display order, plus `as_text` for the raw-text view and Copy All. The `human_*` formatting helpers live here.
+- **[ui.rs](src/ui.rs)** — everything that touches the Slint windows: pushing stored settings in, applying the theme to both windows' `Theme` global, wiring drag-and-drop/browse/copy/settings callbacks, and `analyze_file`, which spawns the background probe and marshals the result back via `slint::invoke_from_event_loop`.
+- **[macos_open.rs](src/macos_open.rs)** — macOS-only. Receives files from Finder "Open With" by adding `application:openURLs:` to winit's existing `NSApplicationDelegate` class at runtime (winit crashes if the delegate is replaced). Raw libobjc FFI; read the file header before touching it.
 
-- **[ui/app.slint](ui/app.slint)** — the entire UI in one Slint component (`AppWindow`). State is exposed as `in-out property` (`has-file`, `is-drag-hover`, `file-name`, `status-text`, `is-error`, `info-rows: [InfoRow]`) that Rust sets directly (`app.set_*`), plus one `callback browse-clicked()` invoked from Slint and handled in Rust. The `InfoRow` struct (`label`, `value`) is defined in `.slint` and shared with Rust via `slint::include_modules!()` in `main.rs`, which compiles the file at build time ([build.rs](build.rs) calls `slint_build::compile`).
+### Slint ([ui/](ui/))
 
-There is no separate "backend"/"frontend" split beyond this Rust/Slint boundary — all business logic (ffprobe invocation, parsing, formatting) lives in `main.rs`, and `app.slint` is purely presentational, driven by the properties above.
+[build.rs](build.rs) compiles [ui/app.slint](ui/app.slint), which is only a set of re-exports — anything Rust needs to reach must be exported from there.
+
+- **[ui/theme.slint](ui/theme.slint)** — the `Theme` global (Catppuccin Mocha/Latte palette) and `ThemeMode` enum. Globals are per top-level component, so Rust must set `mode`/`system-is-dark` on _both_ windows (`ui::apply_theme` does).
+- **[ui/widgets.slint](ui/widgets.slint)** — `SelectableText`, the read-only `TextInput` used wherever text should be selectable/copyable.
+- **[ui/main-window.slint](ui/main-window.slint)** — `AppWindow` and the `InfoRow` struct. State comes in as `in-out property`s set from Rust; user actions go out as callbacks. `zoom` (View menu) scales layout metrics, `font-scale` scales the font sizes hardcoded against the 16px baseline.
+- **[ui/settings-window.slint](ui/settings-window.slint)** — `SettingsWindow`, plus its `ResetButton` and `SettingRow` components. Defaults for the reset buttons and the theme list are supplied by Rust so they aren't duplicated here.
 
 ### Editing the UI
 
-Use the Slint LSP extension (`Slint.slint`, listed in [.vscode/extensions.json](.vscode/extensions.json)) for `.slint` editing. Any new UI property or callback added in `app.slint` must be mirrored with corresponding `app.set_*`/`app.on_*` calls in `main.rs`.
+Use the Slint LSP extension (`Slint.slint`, listed in [.vscode/extensions.json](.vscode/extensions.json)) for `.slint` editing. Any new UI property or callback must be mirrored with corresponding `app.set_*`/`app.on_*` calls in [src/ui.rs](src/ui.rs).

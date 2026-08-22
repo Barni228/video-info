@@ -1,0 +1,190 @@
+import { ComboBox, ScrollView, Slider, Switch, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { SelectableText } from "widgets.slint";
+
+// Icon-only "restore to default" button.
+component ResetButton {
+    in property <length> icon-size: 18px;
+    callback clicked();
+
+    width: root.icon-size + 4px;
+    height: root.icon-size + 4px;
+
+    accessible-role: button;
+    accessible-label: "Reset to default";
+    accessible-action-default => { root.clicked(); }
+
+    TouchArea {
+        clicked => { root.clicked(); }
+
+        Rectangle {
+            background: parent.has-hover ? Theme.hover-background : transparent;
+            border-radius: 4px;
+        }
+
+        // Bootstrap Icons' "arrow-counterclockwise"
+        // (https://icons.getbootstrap.com/icons/arrow-counterclockwise/),
+        // recolored via `colorize` rather than drawn as a Unicode arrow
+        // glyph: some fonts (notably on Windows) don't include one, which
+        // showed up as a missing-glyph box there.
+        Image {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: root.icon-size;
+            height: root.icon-size;
+            source: @image-url("icons/arrow-counterclockwise.svg");
+            colorize: parent.has-hover ? Theme.accent-color : Theme.secondary-text-color;
+        }
+    }
+}
+
+// One setting's header line: its name, then a reset button that appears
+// only once the setting differs from its default. Anything passed as a
+// child sits to the right of that -- for controls small enough to share
+// the line, like a switch. Wider controls go below the row instead.
+component SettingRow inherits HorizontalBox {
+    in property <string> label;
+    in property <bool> modified;
+    in property <length> reset-icon-size;
+    callback reset();
+
+    padding: 0px;
+
+    SelectableText {
+        text: root.label;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+    }
+
+    ResetButton {
+        icon-size: root.reset-icon-size;
+        visible: root.modified;
+        clicked => { root.reset(); }
+    }
+
+    @children
+}
+
+export component SettingsWindow inherits Window {
+    title: "Settings";
+    preferred-width: 340px;
+    preferred-height: 240px;
+    min-width: 340px;
+    min-height: 240px;
+    background: Theme.surface-background;
+    always-on-top: true;
+    default-font-size: root.font-size * 1px;
+
+    // --- Current values. Rust seeds these from the saved settings, and
+    // the callbacks below report every change back to it. ---
+    in-out property <float> font-size: 16.0;
+    // Index into theme-options. Bound through current-index rather than
+    // current-value because writing current-value doesn't update the
+    // ComboBox's visual selection in this Slint version:
+    // https://github.com/slint-ui/slint/issues/11970
+    in-out property <int> theme-index: 0;
+    in-out property <bool> keep-on-top: false;
+
+    // --- Set once by Rust: the theme list (from ThemeSetting::ALL in
+    // src/settings.rs) and the defaults the reset buttons restore, so
+    // neither is duplicated here. ---
+    in property <[string]> theme-options: ["System"];
+    in property <float> font-size-default: 16.0;
+    in property <int> theme-default-index: 0;
+
+    // Multiplier for font sizes hardcoded against the 16px baseline.
+    property <float> font-scale: root.font-size / 16;
+
+    callback font-size-changed(float);
+    callback theme-changed(string);
+    callback keep-on-top-changed(bool);
+
+    ScrollView {
+        VerticalBox {
+            padding: 18px;
+            spacing: 16px;
+            alignment: start;
+
+            SelectableText {
+                text: "Settings";
+                font-size: 18px * root.font-scale;
+                font-weight: 700;
+            }
+
+            VerticalBox {
+                padding: 0px;
+                spacing: 4px;
+
+                SettingRow {
+                    label: "Default font size";
+                    reset-icon-size: root.font-size * 1px;
+                    modified: root.font-size != root.font-size-default;
+                    reset => {
+                        root.font-size = root.font-size-default;
+                        root.font-size-changed(root.font-size);
+                    }
+                }
+
+                HorizontalBox {
+                    padding: 0px;
+                    spacing: 8px;
+
+                    Slider {
+                        minimum: 12;
+                        maximum: 24;
+                        step: 1;
+                        value <=> root.font-size;
+                        // Snap the slider's fractional positions to whole
+                        // point sizes.
+                        changed(value) => {
+                            root.font-size = round(value);
+                            root.font-size-changed(root.font-size);
+                        }
+                    }
+
+                    SelectableText {
+                        text: round(root.font-size) + " px";
+                        color: Theme.secondary-text-color;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            VerticalBox {
+                padding: 0px;
+                spacing: 4px;
+
+                SettingRow {
+                    label: "Theme";
+                    reset-icon-size: root.font-size * 1px;
+                    modified: root.theme-index != root.theme-default-index;
+                    reset => {
+                        root.theme-index = root.theme-default-index;
+                        root.theme-changed(root.theme-options[root.theme-default-index]);
+                    }
+                }
+
+                ComboBox {
+                    model: root.theme-options;
+                    current-index <=> root.theme-index;
+                    selected(label) => { root.theme-changed(label); }
+                }
+            }
+
+            SettingRow {
+                label: "Always on top";
+                reset-icon-size: root.font-size * 1px;
+                modified: root.keep-on-top;
+                reset => {
+                    root.keep-on-top = false;
+                    root.keep-on-top-changed(false);
+                }
+
+                Switch {
+                    checked <=> root.keep-on-top;
+                    toggled => { root.keep-on-top-changed(root.keep-on-top); }
+                }
+            }
+        }
+    }
+}

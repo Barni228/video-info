@@ -1,0 +1,29 @@
+export enum ThemeMode { System, Light, Dark }
+
+// A hand-rolled Catppuccin Mocha (dark) / Latte (light) palette, used
+// instead of the default style's neutral Palette colors.
+//
+// Globals are per top-level component: AppWindow and SettingsWindow each
+// get their own copy of this one, so Rust has to set `mode` and
+// `system-is-dark` on both (see apply_theme in src/ui.rs).
+export global Theme {
+    // Set by Rust: the user's preference from the Settings window, plus --
+    // when that preference is System -- the OS's current color scheme,
+    // kept up to date from winit's WindowEvent::ThemeChanged.
+    in-out property <ThemeMode> mode: ThemeMode.System;
+    in-out property <bool> system-is-dark: false;
+
+    out property <bool> is-dark: mode == ThemeMode.Dark
+        ? true
+        : mode == ThemeMode.Light ? false : system-is-dark;
+
+    out property <color> surface-background: is-dark ? #11111b : #eff1f5;
+    out property <color> panel-background: is-dark ? #181825 : #e6e9ef;
+    out property <color> hover-background: is-dark ? #1e2030 : #ccd0da;
+    out property <color> raw-view-background: is-dark ? #313244 : #ccd0da;
+    out property <color> border-color: is-dark ? #45475a : #bcc0cc;
+    out property <color> text-color: is-dark ? #cdd6f4 : #4c4f69;
+    out property <color> secondary-text-color: is-dark ? #a6adc8 : #6c6f85;
+    out property <color> accent-color: is-dark ? #89b4fa : #1e66f5;
+    out property <color> error-color: is-dark ? #f38ba8 : #d20f39;
+}

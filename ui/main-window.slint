@@ -1,0 +1,214 @@
+import { Button, ScrollView, Switch, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { SelectableText } from "widgets.slint";
+
+// One line of the report, as built by src/report.rs.
+export struct InfoRow {
+    label: string,
+    value: string,
+}
+
+export component AppWindow inherits Window {
+    title: "Video Info";
+    preferred-width: 640px;
+    preferred-height: 580px;
+    min-width: 480px;
+    min-height: 420px;
+    background: Theme.surface-background;
+    always-on-top: root.keep-on-top;
+    default-font-size: root.base-font-size * 1px * root.zoom;
+
+    // --- State, all set from Rust (see src/ui.rs) ---
+    in-out property <bool> has-file: false;
+    in-out property <bool> is-drag-hover: false;
+    in-out property <string> file-name: "";
+    in-out property <string> status-text: "";
+    in-out property <bool> is-error: false;
+    in-out property <[InfoRow]> info-rows: [];
+    // The same data as info-rows, flattened to "label: value" lines, for
+    // the raw-text view -- one selectable block, easier to select-all and
+    // copy from than the per-row layout.
+    in-out property <string> raw-info-text: "";
+
+    // Persisted settings, applied here as the baseline that zoom scales.
+    in-out property <float> base-font-size: 16.0;
+    in-out property <bool> keep-on-top: false;
+
+    // --- Local view state ---
+    in-out property <bool> show-raw-view: false;
+
+    // Zoom level, like a browser's page zoom: 1.0 = 100%. Driven by the
+    // View menu / Cmd +/-/0. Applied to layout metrics directly, and to
+    // font sizes through font-scale below.
+    in-out property <float> zoom: 1.0;
+
+    // Multiplier for the font sizes hardcoded here against the default
+    // 16px baseline, so they follow the font-size setting as well as zoom.
+    property <float> font-scale: root.base-font-size / 16 * root.zoom;
+
+    callback browse-clicked();
+    callback copy-all-clicked();
+    callback settings-clicked();
+
+    MenuBar {
+        Menu {
+            title: "View";
+
+            MenuItem {
+                title: "Settings…";
+                shortcut: @keys(Control + Comma);
+                activated => { root.settings-clicked(); }
+            }
+
+            MenuSeparator { }
+
+            MenuItem {
+                title: "Zoom In";
+                // Bound to the unshifted "=" key (not "+"/Shift+=) so the
+                // plain Cmd+= press most people reflexively use works too.
+                shortcut: @keys(Control + Equals);
+                activated => { root.zoom = min(root.zoom + 0.1, 3.0); }
+            }
+
+            MenuItem {
+                title: "Zoom Out";
+                shortcut: @keys(Control + HyphenMinus);
+                activated => { root.zoom = max(root.zoom - 0.1, 0.5); }
+            }
+
+            MenuItem {
+                title: "Reset Zoom";
+                shortcut: @keys(Control + "0");
+                activated => { root.zoom = 1.0; }
+            }
+        }
+    }
+
+    FocusScope {
+        init => { self.focus(); }
+
+        key-pressed(event) => {
+            if (event.text == "r" || event.text == "R") {
+                root.show-raw-view = !root.show-raw-view;
+                return accept;
+            }
+            return reject;
+        }
+
+        ScrollView {
+            VerticalBox {
+                padding: 18px * root.zoom;
+                spacing: 12px * root.zoom;
+                alignment: start;
+
+                Text {
+                    text: "Video Info";
+                    font-size: 22px * root.font-scale;
+                    font-weight: 700;
+                    color: Theme.text-color;
+                }
+
+                // Drop target. Native drag & drop is handled in Rust, off
+                // winit's window events; this only reflects its state.
+                Rectangle {
+                    height: (root.has-file ? 84px : 170px) * root.zoom;
+                    border-radius: 12px;
+                    border-width: 2px;
+                    border-color: root.is-drag-hover ? Theme.accent-color : Theme.border-color;
+                    background: root.is-drag-hover ? Theme.hover-background : Theme.panel-background;
+
+                    VerticalBox {
+                        alignment: center;
+                        spacing: 4px * root.zoom;
+
+                        Text {
+                            text: root.has-file ? root.file-name : "Drag & drop a file here";
+                            color: Theme.text-color;
+                            horizontal-alignment: center;
+                            wrap: word-wrap;
+                        }
+
+                        Text {
+                            visible: !root.has-file;
+                            text: "or use the button below";
+                            color: Theme.secondary-text-color;
+                            font-size: 13px * root.font-scale;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                Button {
+                    text: "Browse for file...";
+                    clicked => { root.browse-clicked(); }
+                }
+
+                // "Analyzing..." while a probe runs, or the reason it
+                // failed. Selectable so an error can be copied out.
+                SelectableText {
+                    visible: root.status-text != "";
+                    text: root.status-text;
+                    color: root.is-error ? Theme.error-color : Theme.secondary-text-color;
+                    font-size: 14px * root.font-scale;
+                }
+
+                HorizontalBox {
+                    visible: root.info-rows.length > 0;
+                    padding: 0px;
+                    alignment: end;
+
+                    Switch {
+                        text: "Raw Text View";
+                        checked <=> root.show-raw-view;
+                    }
+
+                    Button {
+                        text: "Copy All";
+                        clicked => { root.copy-all-clicked(); }
+                    }
+                }
+
+                if root.show-raw-view && root.info-rows.length > 0: Rectangle {
+                    background: Theme.raw-view-background;
+                    border-radius: 8px;
+
+                    VerticalBox {
+                        padding: 12px * root.zoom;
+
+                        SelectableText {
+                            text: root.raw-info-text;
+                            font-family: "Courier New";
+                        }
+                    }
+                }
+
+                if !root.show-raw-view: VerticalBox {
+                    padding: 0px;
+                    spacing: 6px * root.zoom;
+
+                    for row in root.info-rows: Rectangle {
+                        background: Theme.panel-background;
+                        border-radius: 6px;
+
+                        HorizontalBox {
+                            padding: 6px * root.zoom;
+                            spacing: 8px * root.zoom;
+
+                            SelectableText {
+                                text: row.label;
+                                font-weight: 600;
+                                color: Theme.accent-color;
+                                width: 150px * root.zoom;
+                            }
+
+                            SelectableText {
+                                text: row.value;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -116,6 +116,9 @@ pub fn install_open_urls_swizzle() {
         let types = CString::new("v@:@@").unwrap();
         let imp: Imp = std::mem::transmute(application_open_urls as *const ());
         class_addMethod(delegate_class, selector, imp, types.as_ptr());
+        // The runtime keeps the type-encoding pointer rather than copying
+        // the string, so it has to outlive the class -- i.e. the process.
+        // Leaking these few bytes once is the simplest way to guarantee it.
         std::mem::forget(types);
     }
 }

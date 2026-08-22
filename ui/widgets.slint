@@ -1,0 +1,12 @@
+import { Theme } from "theme.slint";
+
+// A run of text the user can select and copy. It looks like a Text, but is
+// a read-only TextInput -- the only way to make text selectable in Slint.
+// Everything about a real TextInput still applies, so callers set
+// font-size, color, alignment and so on directly.
+export component SelectableText inherits TextInput {
+    read-only: true;
+    single-line: false;
+    wrap: word-wrap;
+    color: Theme.text-color;
+}
