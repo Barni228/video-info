@@ -3,6 +3,11 @@
 //! The row order here is the display order, top to bottom: file and
 //! container facts, then the video and audio tracks, then subtitles and
 //! chapters.
+//!
+//! Which of those sections appear depends on what the file turned out to
+//! be -- see [`Media`]. Reporting an absence is only worth a row where
+//! the thing could plausibly have been there: "No audio stream" says
+//! something about a movie, and nothing at all about a GIF.
 
 use std::path::Path;
 
@@ -11,9 +16,52 @@ use slint::SharedString;
 use crate::InfoRow;
 use crate::ffprobe::{Chapter, Report, Stream, StreamKind};
 
+/// What the file turned out to be, which is what decides the sections
+/// worth showing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Media {
+    /// Moving video, with or without a sound track: the full report.
+    Movie,
+    /// Sound only. Any picture in it is cover art, not a video track.
+    Audio,
+    /// A picture format -- a still image, or a silent animation like a
+    /// GIF. It has frames and nothing else. `animated` separates the two:
+    /// a run of frames has a duration and a rate, a single still doesn't.
+    Image { animated: bool },
+}
+
+impl Media {
+    fn of(report: &Report) -> Self {
+        let image_container = report.format.as_ref().is_some_and(|format| format.is_image());
+        let video = report.video_stream();
+        if image_container {
+            return Self::Image {
+                animated: video.and_then(animated_frame_count).is_some(),
+            };
+        }
+        match video {
+            Some(_) => Self::Movie,
+            // No moving picture and not a picture file: whatever sound
+            // track got this far is the whole story.
+            None => Self::Audio,
+        }
+    }
+
+    fn is_image(self) -> bool {
+        matches!(self, Self::Image { .. })
+    }
+
+    /// A single frame, so anything measured over time -- duration, frame
+    /// rate, bitrate -- is either absent or invented.
+    fn is_still_image(self) -> bool {
+        self == Self::Image { animated: false }
+    }
+}
+
 /// Builds the rows shown for `path`, whose analysis produced `report`.
 pub fn rows(path: &Path, report: &Report) -> Vec<InfoRow> {
     let mut rows = Rows::default();
+    let media = Media::of(report);
 
     // ffprobe reports the stream sizes, not the file's, so ask the OS.
     if let Ok(metadata) = std::fs::metadata(path) {
@@ -22,13 +70,17 @@ pub fn rows(path: &Path, report: &Report) -> Vec<InfoRow> {
 
     if let Some(format) = &report.format {
         rows.push_some("Container", format.container());
-        rows.push_some("Duration", format.duration_secs().map(human_duration));
-        rows.push_some("Overall bitrate", format.bitrate_bps().map(human_bitrate));
+        // A single still has no duration to speak of; ffprobe reports one
+        // anyway ("00:00"), along with a bitrate derived from it.
+        if !media.is_still_image() {
+            rows.push_some("Duration", format.duration_secs().map(human_duration));
+            rows.push_some("Overall bitrate", format.bitrate_bps().map(human_bitrate));
+        }
     }
 
-    video_rows(&mut rows, report.first_stream(StreamKind::Video));
-    audio_rows(&mut rows, report.first_stream(StreamKind::Audio));
-    subtitle_rows(&mut rows, report);
+    picture_rows(&mut rows, report, media);
+    audio_rows(&mut rows, report, media);
+    subtitle_rows(&mut rows, report, media);
     chapter_rows(&mut rows, report);
 
     rows.into_vec()
@@ -68,20 +120,46 @@ impl Rows {
     }
 }
 
-fn video_rows(rows: &mut Rows, video: Option<&Stream>) {
-    let Some(video) = video else {
+/// The moving-picture section. For an audio file this is skipped
+/// entirely -- bar a line for its cover art, which is the one picture
+/// worth mentioning there.
+fn picture_rows(rows: &mut Rows, report: &Report, media: Media) {
+    if media == Media::Audio {
+        if let Some(cover) = report.cover_art() {
+            rows.push_some("Cover art", describe_cover_art(cover));
+        }
+        return;
+    }
+
+    let Some(video) = report.video_stream() else {
+        // Only a movie can be missing its video: a picture file that got
+        // this far has frames by definition.
         rows.push("Video", "No video stream found");
         return;
     };
 
-    rows.push_some("Video codec", video.codec());
+    // A still image has no video track to speak of, so its frames are
+    // labelled for what they are.
+    let codec_label = if media.is_image() {
+        "Image format"
+    } else {
+        "Video codec"
+    };
+    rows.push_some(codec_label, video.codec());
     rows.push_some("Profile", video.profile.as_deref());
     rows.push_some("Resolution", video.resolution());
     rows.push_some("Aspect ratio", video.display_aspect_ratio.as_deref());
-    rows.push_some(
-        "Frame rate",
-        video.frame_rate().map(|fps| format!("{fps:.2} fps")),
-    );
+    if media.is_image() {
+        rows.push_some("Frames", animated_frame_count(video).map(|n| n.to_string()));
+    }
+    // ffprobe invents a nominal 25 fps for a single still, so the rate is
+    // only worth showing once there is something to animate.
+    if !media.is_still_image() {
+        rows.push_some(
+            "Frame rate",
+            video.frame_rate().map(|fps| format!("{fps:.2} fps")),
+        );
+    }
     rows.push_some("Pixel format", video.pix_fmt.as_deref());
     rows.push_some(
         "Bit depth",
@@ -93,9 +171,27 @@ fn video_rows(rows: &mut Rows, video: Option<&Stream>) {
     rows.push_some("Video bitrate", video.bitrate_bps().map(human_bitrate));
 }
 
-fn audio_rows(rows: &mut Rows, audio: Option<&Stream>) {
-    let Some(audio) = audio else {
-        rows.push("Audio", "No audio stream found");
+/// The frame count of a stream that actually moves, or `None` for a
+/// single still.
+fn animated_frame_count(video: &Stream) -> Option<i64> {
+    video.frame_count().filter(|&frames| frames > 1)
+}
+
+/// e.g. `600 x 600 (MJPEG)`, for the picture embedded in an audio file.
+fn describe_cover_art(cover: &Stream) -> Option<String> {
+    match (cover.resolution(), cover.codec()) {
+        (Some(resolution), Some(codec)) => Some(format!("{resolution} ({codec})")),
+        (Some(resolution), None) => Some(resolution),
+        (None, codec) => codec.map(str::to_string),
+    }
+}
+
+fn audio_rows(rows: &mut Rows, report: &Report, media: Media) {
+    let Some(audio) = report.first_stream(StreamKind::Audio) else {
+        // A picture format has no sound track to be missing.
+        if media == Media::Movie {
+            rows.push("Audio", "No audio stream found");
+        }
         return;
     };
 
@@ -116,10 +212,14 @@ fn audio_rows(rows: &mut Rows, audio: Option<&Stream>) {
     rows.push_some("Audio bitrate", audio.bitrate_bps().map(human_bitrate));
 }
 
-fn subtitle_rows(rows: &mut Rows, report: &Report) {
+fn subtitle_rows(rows: &mut Rows, report: &Report, media: Media) {
     let subtitles: Vec<&Stream> = report.streams_of(StreamKind::Subtitle).collect();
     if subtitles.is_empty() {
-        rows.push("Subtitles", "None");
+        // Worth saying for a movie, where subtitles might have been
+        // expected. An audio file or a GIF can't carry them at all.
+        if media == Media::Movie {
+            rows.push("Subtitles", "None");
+        }
         return;
     }
 
@@ -207,6 +307,131 @@ fn human_bitrate(bits_per_sec: f64) -> String {
 mod tests {
     use super::*;
 
+    /// Builds a report from ffprobe-shaped JSON, so these tests exercise
+    /// the same deserialization the real thing goes through.
+    fn report(json: serde_json::Value) -> Report {
+        serde_json::from_value(json).expect("test report should deserialize")
+    }
+
+    fn labels(report: &Report) -> Vec<String> {
+        let media = Media::of(report);
+        let mut rows = Rows::default();
+        picture_rows(&mut rows, report, media);
+        audio_rows(&mut rows, report, media);
+        subtitle_rows(&mut rows, report, media);
+        rows.into_vec()
+            .into_iter()
+            .map(|row| row.label.to_string())
+            .collect()
+    }
+
+    fn value_of(report: &Report, label: &str) -> Option<String> {
+        let media = Media::of(report);
+        let mut rows = Rows::default();
+        picture_rows(&mut rows, report, media);
+        audio_rows(&mut rows, report, media);
+        rows.into_vec()
+            .into_iter()
+            .find(|row| row.label == label)
+            .map(|row| row.value.to_string())
+    }
+
+    #[test]
+    fn a_movie_reports_what_it_is_missing() {
+        let movie = report(serde_json::json!({
+            "format": { "format_name": "mov,mp4,m4a,3gp,3g2,mj2" },
+            "streams": [{ "codec_type": "video", "codec_name": "h264" }],
+        }));
+        assert_eq!(Media::of(&movie), Media::Movie);
+        let labels = labels(&movie);
+        assert!(labels.contains(&"Audio".to_string()));
+        assert!(labels.contains(&"Subtitles".to_string()));
+    }
+
+    #[test]
+    fn a_gif_is_not_asked_about_sound_or_subtitles() {
+        let gif = report(serde_json::json!({
+            "format": { "format_name": "gif" },
+            "streams": [{
+                "codec_type": "video", "codec_name": "gif", "nb_frames": "30",
+            }],
+        }));
+        assert_eq!(Media::of(&gif), Media::Image { animated: true });
+        let labels = labels(&gif);
+        assert!(!labels.contains(&"Audio".to_string()));
+        assert!(!labels.contains(&"Subtitles".to_string()));
+        // It does move, so its rate is worth reporting.
+        assert!(labels.contains(&"Frames".to_string()));
+    }
+
+    #[test]
+    fn a_still_image_has_no_invented_frame_rate() {
+        let still = report(serde_json::json!({
+            "format": { "format_name": "png_pipe" },
+            "streams": [{
+                "codec_type": "video", "codec_name": "png", "r_frame_rate": "25/1",
+            }],
+        }));
+        assert_eq!(Media::of(&still), Media::Image { animated: false });
+        let labels = labels(&still);
+        assert!(!labels.contains(&"Frame rate".to_string()));
+        assert!(!labels.contains(&"Frames".to_string()));
+        assert!(labels.contains(&"Image format".to_string()));
+    }
+
+    #[test]
+    fn an_audio_file_is_not_asked_about_video_or_subtitles() {
+        let audio = report(serde_json::json!({
+            "format": { "format_name": "mp3" },
+            "streams": [{ "codec_type": "audio", "codec_name": "mp3" }],
+        }));
+        assert_eq!(Media::of(&audio), Media::Audio);
+        let labels = labels(&audio);
+        assert!(!labels.contains(&"Video".to_string()));
+        assert!(!labels.contains(&"Subtitles".to_string()));
+        assert!(labels.contains(&"Audio codec".to_string()));
+    }
+
+    #[test]
+    fn cover_art_is_a_picture_not_a_video_track() {
+        let with_cover = report(serde_json::json!({
+            "format": { "format_name": "mp3" },
+            "streams": [
+                { "codec_type": "audio", "codec_name": "mp3" },
+                {
+                    "codec_type": "video", "codec_name": "mjpeg",
+                    "width": 600, "height": 600, "r_frame_rate": "90000/1",
+                    "disposition": { "attached_pic": 1 },
+                },
+            ],
+        }));
+        assert_eq!(Media::of(&with_cover), Media::Audio);
+        let labels = labels(&with_cover);
+        assert!(!labels.contains(&"Video codec".to_string()));
+        assert!(!labels.contains(&"Frame rate".to_string()));
+        assert_eq!(
+            value_of(&with_cover, "Cover art").as_deref(),
+            Some("600 x 600 (mjpeg)")
+        );
+    }
+
+    #[test]
+    fn subtitles_are_listed_wherever_they_actually_exist() {
+        let subtitled = report(serde_json::json!({
+            "format": { "format_name": "matroska,webm" },
+            "streams": [
+                { "codec_type": "video", "codec_name": "h264" },
+                {
+                    "codec_type": "subtitle", "codec_long_name": "SubRip subtitle",
+                    "tags": { "language": "eng" },
+                },
+            ],
+        }));
+        let labels = labels(&subtitled);
+        assert!(labels.contains(&"Subtitle track 1".to_string()));
+        assert!(!labels.contains(&"Subtitles".to_string()));
+    }
+
     #[test]
     fn formats_durations() {
         assert_eq!(human_duration(0.0), "00:00");
@@ -229,3 +454,4 @@ mod tests {
         assert_eq!(human_bitrate(5_432_100.0), "5432 kb/s");
     }
 }
+

@@ -155,6 +155,18 @@ impl Report {
     pub fn first_stream(&self, kind: StreamKind) -> Option<&Stream> {
         self.streams_of(kind).next()
     }
+
+    /// The file's actual video track, ignoring any embedded cover art.
+    pub fn video_stream(&self) -> Option<&Stream> {
+        self.streams_of(StreamKind::Video)
+            .find(|stream| !stream.is_cover_art())
+    }
+
+    /// The embedded picture, where the file carries one.
+    pub fn cover_art(&self) -> Option<&Stream> {
+        self.streams_of(StreamKind::Video)
+            .find(|stream| stream.is_cover_art())
+    }
 }
 
 /// One entry of ffprobe's `-show_streams`.
@@ -175,8 +187,19 @@ pub struct Stream {
     pub channel_layout: Option<String>,
     pub display_aspect_ratio: Option<String>,
     pub bits_per_raw_sample: Option<String>,
+    pub nb_frames: Option<String>,
+    #[serde(default)]
+    pub disposition: Disposition,
     #[serde(default)]
     pub tags: HashMap<String, String>,
+}
+
+/// The flags ffprobe reports for a stream. Only the one that changes what
+/// gets displayed is modelled.
+#[derive(Debug, Default, Deserialize)]
+pub struct Disposition {
+    #[serde(default)]
+    pub attached_pic: i64,
 }
 
 impl Stream {
@@ -211,6 +234,19 @@ impl Stream {
     pub fn tag(&self, name: &str) -> Option<&str> {
         self.tags.get(name).map(String::as_str)
     }
+
+    /// Whether this is an embedded picture -- album art on an MP3, say --
+    /// rather than a track of moving video. ffprobe reports both as
+    /// `codec_type: video`, but describing cover art as the file's video
+    /// stream ("90000 fps") is worse than useless.
+    pub fn is_cover_art(&self) -> bool {
+        self.disposition.attached_pic == 1
+    }
+
+    /// How many frames the stream holds, where ffprobe counted them.
+    pub fn frame_count(&self) -> Option<i64> {
+        self.nb_frames.as_deref()?.trim().parse().ok()
+    }
 }
 
 /// ffprobe's `-show_format`: what the container itself says.
@@ -237,6 +273,19 @@ impl Format {
 
     pub fn bitrate_bps(&self) -> Option<f64> {
         number(&self.bit_rate)
+    }
+
+    /// Whether the container is a picture format -- a GIF, PNG, JPEG and
+    /// so on. These hold frames and nothing else: no sound track, no
+    /// subtitles, so there is nothing to report as missing.
+    ///
+    /// ffprobe names the single-image demuxers `png_pipe`, `jpeg_pipe`
+    /// and friends; the animated formats get a bare name of their own.
+    pub fn is_image(&self) -> bool {
+        let Some(name) = self.format_name.as_deref() else {
+            return false;
+        };
+        name.ends_with("_pipe") || matches!(name, "gif" | "apng" | "image2" | "webp")
     }
 }
 
