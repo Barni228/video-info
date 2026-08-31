@@ -9,19 +9,9 @@ use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use winit::event::WindowEvent;
 
+use crate::file_kind::{AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};
 use crate::settings::{self, Settings, SettingsStore, ThemeSetting};
 use crate::{AppWindow, InfoRow, SettingsWindow, Theme, ThemeMode, ffprobe, report};
-
-/// Extensions the file picker offers to filter by. Deliberately a superset
-/// of the `file-associations` in Cargo.toml (which decide what the app
-/// registers itself as an "Open With" handler for): the picker can list
-/// formats without claiming to own them.
-const VIDEO_EXTENSIONS: &[&str] = &[
-    "mp4", "mkv", "mov", "avi", "webm", "flv", "wmv", "m4v", "mpg", "mpeg", "ts", "3gp", "ogv",
-];
-const AUDIO_EXTENSIONS: &[&str] = &[
-    "mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "wma", "aiff",
-];
 
 impl From<ThemeSetting> for ThemeMode {
     fn from(setting: ThemeSetting) -> Self {
@@ -51,7 +41,8 @@ pub fn analyze_file(app_weak: &Weak<AppWindow>, path: PathBuf) {
         app.set_has_file(true);
         app.set_file_name(display_name(&path).into());
         app.set_status_text("Analyzing...".into());
-        app.set_is_error(false);
+        set_status_kind(&app, StatusKind::Progress);
+        app.set_status_detail(SharedString::new());
         app.set_info_rows(ModelRc::new(VecModel::from(Vec::<InfoRow>::new())));
         app.set_raw_info_text(SharedString::new());
     }
@@ -60,25 +51,54 @@ pub fn analyze_file(app_weak: &Weak<AppWindow>, path: PathBuf) {
     // off the event loop and marshal the result back.
     let app_weak = app_weak.clone();
     std::thread::spawn(move || {
-        let result = ffprobe::run(&path).map(|probed| report::rows(&path, &probed));
+        let result = ffprobe::run(&path)
+            .map(|probed| (report::rows(&path, &probed.report), probed.warning));
         let _ = slint::invoke_from_event_loop(move || {
             let Some(app) = app_weak.upgrade() else {
                 return;
             };
             match result {
-                Ok(rows) => {
-                    app.set_status_text(SharedString::new());
-                    app.set_is_error(false);
+                Ok((rows, warning)) => {
+                    match warning {
+                        // The file was readable, but ffprobe grumbled on
+                        // the way through -- so show the rows, and say
+                        // they may not be the whole story.
+                        Some(warning) => {
+                            app.set_status_text(
+                                "This file has problems, but here's what could be read.".into(),
+                            );
+                            app.set_status_detail(warning.into());
+                            set_status_kind(&app, StatusKind::Warning);
+                        }
+                        None => {
+                            app.set_status_text(SharedString::new());
+                            set_status_kind(&app, StatusKind::Progress);
+                        }
+                    }
                     app.set_raw_info_text(report::as_text(&rows).into());
                     app.set_info_rows(ModelRc::new(VecModel::from(rows)));
                 }
                 Err(err) => {
-                    app.set_status_text(err.to_string().into());
-                    app.set_is_error(true);
+                    app.set_status_text(err.headline().into());
+                    app.set_status_detail(err.detail().unwrap_or_default().into());
+                    set_status_kind(&app, StatusKind::Error);
                 }
             }
         });
     });
+}
+
+/// How the status line under the Browse button should read: as an
+/// error, as a caveat on results that are shown anyway, or as neither.
+enum StatusKind {
+    Progress,
+    Warning,
+    Error,
+}
+
+fn set_status_kind(app: &AppWindow, kind: StatusKind) {
+    app.set_is_error(matches!(kind, StatusKind::Error));
+    app.set_is_warning(matches!(kind, StatusKind::Warning));
 }
 
 /// Pushes `stored` into both windows, along with the defaults their

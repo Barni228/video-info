@@ -22,8 +22,15 @@ export component AppWindow inherits Window {
     in-out property <bool> has-file: false;
     in-out property <bool> is-drag-hover: false;
     in-out property <string> file-name: "";
+    // The line under the Browse button: "Analyzing...", or the headline
+    // of whatever went wrong. status-detail is the supporting line shown
+    // beneath it -- usually ffprobe's own words.
     in-out property <string> status-text: "";
+    in-out property <string> status-detail: "";
     in-out property <bool> is-error: false;
+    // Set instead of is-error when the file was readable but ffprobe
+    // complained on the way through, so the rows below may be wrong.
+    in-out property <bool> is-warning: false;
     in-out property <[InfoRow]> info-rows: [];
     // The same data as info-rows, flattened to "label: value" lines, for
     // the raw-text view -- one selectable block, easier to select-all and
@@ -147,11 +154,25 @@ export component AppWindow inherits Window {
 
                 // "Analyzing..." while a probe runs, or the reason it
                 // failed. Selectable so an error can be copied out.
-                SelectableText {
-                    visible: root.status-text != "";
-                    text: root.status-text;
-                    color: root.is-error ? Theme.error-color : Theme.secondary-text-color;
-                    font-size: 14px * root.font-scale;
+                if root.status-text != "": VerticalBox {
+                    padding: 0px;
+                    spacing: 2px * root.zoom;
+
+                    SelectableText {
+                        text: root.status-text;
+                        color: root.is-error
+                            ? Theme.error-color
+                            : root.is-warning ? Theme.warning-color : Theme.secondary-text-color;
+                        font-size: 14px * root.font-scale;
+                        font-weight: root.status-detail != "" ? 700 : 400;
+                    }
+
+                    SelectableText {
+                        visible: root.status-detail != "";
+                        text: root.status-detail;
+                        color: Theme.secondary-text-color;
+                        font-size: 13px * root.font-scale;
+                    }
                 }
 
                 HorizontalBox {

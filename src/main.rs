@@ -12,6 +12,7 @@
 //!
 //! - [`settings`]: what the Settings window persists, and where.
 //! - [`ffprobe`]: running ffprobe and deserializing its report.
+//! - [`file_kind`]: what a file's name suggests it holds.
 //! - [`report`]: turning that report into the rows the UI displays.
 //! - [`ui`]: pushing state into the Slint windows and handling their
 //!   callbacks.
@@ -20,6 +21,7 @@
 slint::include_modules!();
 
 mod ffprobe;
+mod file_kind;
 #[cfg(target_os = "macos")]
 mod macos_open;
 mod report;
@@ -61,9 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Opened via a command-line argument: Windows file associations, or
     // `cargo run -- file.mp4`. macOS "Open With" doesn't arrive this way;
     // it comes through macos_open.rs instead.
-    if let Some(path) = std::env::args().nth(1).map(PathBuf::from)
-        && path.exists()
-    {
+    if let Some(path) = std::env::args().nth(1).map(PathBuf::from) {
         ui::analyze_file(&app.as_weak(), path);
     }
 
