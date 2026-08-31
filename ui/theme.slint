@@ -1,3 +1,5 @@
+import { Palette } from "std-widgets.slint";
+
 export enum ThemeMode { System, Light, Dark }
 
 // A hand-rolled Catppuccin Mocha (dark) / Latte (light) palette, used
@@ -26,4 +28,25 @@ export global Theme {
     out property <color> secondary-text-color: is-dark ? #a6adc8 : #6c6f85;
     out property <color> accent-color: is-dark ? #89b4fa : #1e66f5;
     out property <color> error-color: is-dark ? #f38ba8 : #d20f39;
+}
+
+// The std-widgets (Button, ComboBox, Slider, Switch, ScrollView...) don't
+// read `Theme` -- they draw from the current style's own Palette, which
+// follows the OS color scheme unless something overrides it. Without this
+// they stay dark on a dark system even when the user picks Light.
+//
+// Each Window places one of these directly in its body (not inside a
+// layout -- it is zero-sized) to keep that Palette in step with `Theme`.
+export component ThemeBridge {
+    width: 0px;
+    height: 0px;
+
+    property <bool> dark: Theme.is-dark;
+
+    init => { root.apply(); }
+    changed dark => { root.apply(); }
+
+    function apply() {
+        Palette.color-scheme = root.dark ? ColorScheme.dark : ColorScheme.light;
+    }
 }

@@ -6,7 +6,7 @@ import {
     VerticalBox,
     HorizontalBox,
 } from "std-widgets.slint";
-import { Theme } from "theme.slint";
+import { Theme, ThemeBridge } from "theme.slint";
 import { SelectableText } from "widgets.slint";
 
 // Icon-only "restore to default" button.
@@ -101,6 +101,8 @@ export component SettingsWindow inherits Window {
     callback font-size-changed(float);
     callback theme-changed(string);
     callback keep-on-top-changed(bool);
+
+    ThemeBridge { }
 
     ScrollView {
         VerticalBox {

@@ -1,5 +1,5 @@
 import { Button, ScrollView, Switch, VerticalBox, HorizontalBox } from "std-widgets.slint";
-import { Theme } from "theme.slint";
+import { Theme, ThemeBridge } from "theme.slint";
 import { SelectableText } from "widgets.slint";
 
 // One line of the report, as built by src/report.rs.
@@ -49,6 +49,8 @@ export component AppWindow inherits Window {
     callback browse-clicked();
     callback copy-all-clicked();
     callback settings-clicked();
+
+    ThemeBridge { }
 
     MenuBar {
         Menu {

@@ -34,7 +34,7 @@ Data flows in one direction: a file arrives (drag-drop, file picker, "Open With"
 
 [build.rs](build.rs) compiles [ui/app.slint](ui/app.slint), which is only a set of re-exports — anything Rust needs to reach must be exported from there.
 
-- **[ui/theme.slint](ui/theme.slint)** — the `Theme` global (Catppuccin Mocha/Latte palette) and `ThemeMode` enum. Globals are per top-level component, so Rust must set `mode`/`system-is-dark` on _both_ windows (`ui::apply_theme` does).
+- **[ui/theme.slint](ui/theme.slint)** — the `Theme` global (Catppuccin Mocha/Latte palette) and `ThemeMode` enum. Globals are per top-level component, so Rust must set `mode`/`system-is-dark` on _both_ windows (`ui::apply_theme` does). It also holds `ThemeBridge`, a zero-sized element each Window places once: it copies `Theme.is-dark` into the std-widgets `Palette.color-scheme`, so `Button`, `ComboBox`, `Slider` and friends — which draw from that palette, not from `Theme` — follow the chosen theme instead of the OS's.
 - **[ui/widgets.slint](ui/widgets.slint)** — `SelectableText`, the read-only `TextInput` used wherever text should be selectable/copyable.
 - **[ui/main-window.slint](ui/main-window.slint)** — `AppWindow` and the `InfoRow` struct. State comes in as `in-out property`s set from Rust; user actions go out as callbacks. `zoom` (View menu) scales layout metrics, `font-scale` scales the font sizes hardcoded against the 16px baseline.
 - **[ui/settings-window.slint](ui/settings-window.slint)** — `SettingsWindow`, plus its `ResetButton` and `SettingRow` components. Defaults for the reset buttons and the theme list are supplied by Rust so they aren't duplicated here.
