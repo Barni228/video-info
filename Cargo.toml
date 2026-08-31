@@ -14,6 +14,9 @@ rfd = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 copypasta = "0.10"
+# Update check: a blocking HTTP client, to match the background-thread
+# pattern the ffprobe call already uses. No async runtime involved.
+ureq = "3"
 
 [build-dependencies]
 slint-build = "1.17"

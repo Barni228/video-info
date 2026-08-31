@@ -16,6 +16,7 @@
 //! - [`report`]: turning that report into the rows the UI displays.
 //! - [`ui`]: pushing state into the Slint windows and handling their
 //!   callbacks.
+//! - [`update`]: asking GitHub whether a newer release exists.
 //! - `macos_open`: receiving files from macOS "Open With" (macOS only).
 
 slint::include_modules!();
@@ -27,9 +28,10 @@ mod macos_open;
 mod report;
 mod settings;
 mod ui;
+mod update;
 
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::Arc;
 
 use settings::SettingsStore;
 
@@ -47,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = AppWindow::new()?;
     let settings_window = SettingsWindow::new()?;
-    let store = Rc::new(SettingsStore::load());
+    let store = Arc::new(SettingsStore::load());
     ui::wire(&app, &settings_window, &store);
 
     // Must come after AppWindow::new(): the swizzle needs winit to have

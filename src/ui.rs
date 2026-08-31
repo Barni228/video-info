@@ -2,7 +2,7 @@
 //! and wiring their callbacks back to the rest of the app.
 
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::Arc;
 
 use copypasta::ClipboardProvider;
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
@@ -10,8 +10,8 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel, Weak};
 use winit::event::WindowEvent;
 
 use crate::file_kind::{AUDIO_EXTENSIONS, VIDEO_EXTENSIONS};
-use crate::settings::{self, Settings, SettingsStore, ThemeSetting};
-use crate::{AppWindow, InfoRow, SettingsWindow, Theme, ThemeMode, ffprobe, report};
+use crate::settings::{self, Settings, SettingsStore, ThemeSetting, UpdateInterval};
+use crate::{AppWindow, InfoRow, SettingsWindow, Theme, ThemeMode, ffprobe, report, update};
 
 impl From<ThemeSetting> for ThemeMode {
     fn from(setting: ThemeSetting) -> Self {
@@ -25,12 +25,97 @@ impl From<ThemeSetting> for ThemeMode {
 
 /// Fills both windows with the stored settings and connects every
 /// callback they expose. Call once, after both windows exist.
-pub fn wire(app: &AppWindow, settings_window: &SettingsWindow, store: &Rc<SettingsStore>) {
+pub fn wire(app: &AppWindow, settings_window: &SettingsWindow, store: &Arc<SettingsStore>) {
     apply_stored_settings(app, settings_window, store.get());
     wire_shutdown(app, settings_window);
     wire_window_events(app, settings_window, store);
     wire_main_window(app, settings_window);
     wire_settings_window(settings_window, app, store);
+    start_update_check(app, settings_window, store);
+    size_settings_window(settings_window);
+}
+
+/// Gives the Settings window its starting size.
+///
+/// This can't be done with `preferred-height` in the .slint file: the
+/// window's content sits in a ScrollView, and a scrollable area reports a
+/// small preferred height of its own, which wins. That leaves the window
+/// opening at its `min-height` no matter what `preferred-height` says.
+///
+/// So the starting size is set here instead, from what the content
+/// actually asks for -- which keeps it right both as settings are added
+/// and as the user's font size changes. `min-height` stays small, so the
+/// window can still be dragged smaller than this afterwards.
+fn size_settings_window(settings_window: &SettingsWindow) {
+    const WIDTH: f32 = 340.0;
+    // Beyond this the window would start to be taller than a small
+    // laptop screen. The ScrollView takes care of anything left over.
+    const MAX_HEIGHT: f32 = 700.0;
+
+    let height = settings_window.get_content_height().min(MAX_HEIGHT);
+    settings_window
+        .window()
+        .set_size(slint::LogicalSize::new(WIDTH, height));
+}
+
+/// Shows whatever the last check found, then runs a fresh one if the
+/// user's interval says one is owed.
+fn start_update_check(app: &AppWindow, settings_window: &SettingsWindow, store: &Arc<SettingsStore>) {
+    let stored = store.get();
+    if stored.update_interval == UpdateInterval::Never {
+        return;
+    }
+
+    // The previous check's answer is good enough to show straight away,
+    // and means the notice doesn't disappear on every restart between
+    // checks.
+    announce_update(app, settings_window, stored.latest_seen_version.as_deref());
+
+    if !stored.update_interval.is_due(stored.last_update_check_time()) {
+        return;
+    }
+    check_for_update(app, settings_window, store);
+}
+
+/// Asks GitHub for the newest release on a background thread, records the
+/// answer, and updates both windows with it.
+fn check_for_update(app: &AppWindow, settings_window: &SettingsWindow, store: &Arc<SettingsStore>) {
+    settings_window.set_update_status("Checking...".into());
+
+    let app_weak = app.as_weak();
+    let settings_window_weak = settings_window.as_weak();
+    let store = store.clone();
+    std::thread::spawn(move || {
+        let latest = update::latest_version();
+        store.update(|settings| settings.record_update_check(latest.clone()));
+
+        let _ = slint::invoke_from_event_loop(move || {
+            if let (Some(app), Some(settings_window)) =
+                (app_weak.upgrade(), settings_window_weak.upgrade())
+            {
+                announce_update(&app, &settings_window, latest.as_deref());
+            }
+        });
+    });
+}
+
+/// Puts `latest` in front of the user: a banner on the main window when
+/// it really is newer than this build, and either way a line in Settings
+/// saying where things stand.
+fn announce_update(app: &AppWindow, settings_window: &SettingsWindow, latest: Option<&str>) {
+    let newer = latest.filter(|latest| update::is_newer(latest, update::CURRENT_VERSION));
+
+    app.set_update_version(newer.unwrap_or_default().into());
+    settings_window.set_update_status(
+        match (latest, newer) {
+            (_, Some(version)) => format!("Version {version} is available"),
+            (Some(_), None) => "Up to date".to_string(),
+            // Only reached before the first successful check, or after a
+            // failed one. Either way there is nothing to report.
+            (None, None) => String::new(),
+        }
+        .into(),
+    );
 }
 
 /// Analyzes `path` on a background thread, updating the UI before and
@@ -115,6 +200,10 @@ fn apply_stored_settings(app: &AppWindow, settings_window: &SettingsWindow, stor
     settings_window.set_theme_index(stored.theme.index());
     settings_window.set_theme_default_index(defaults.theme.index());
     settings_window.set_keep_on_top(stored.always_on_top);
+    settings_window.set_update_options(interval_options());
+    settings_window.set_update_index(stored.update_interval.index());
+    settings_window.set_update_default_index(defaults.update_interval.index());
+    settings_window.set_app_version(update::CURRENT_VERSION.into());
 
     // The theme is applied once the event loop is running instead of right
     // now: resolving ThemeSetting::System needs the winit window, which
@@ -136,6 +225,16 @@ fn theme_options() -> ModelRc<SharedString> {
     let labels: Vec<SharedString> = ThemeSetting::ALL
         .iter()
         .map(|theme| theme.label().into())
+        .collect();
+    ModelRc::new(VecModel::from(labels))
+}
+
+/// The update-interval dropdown's model, from [`UpdateInterval::ALL`] for
+/// the same reason the theme list comes from Rust: one source of truth.
+fn interval_options() -> ModelRc<SharedString> {
+    let labels: Vec<SharedString> = UpdateInterval::ALL
+        .iter()
+        .map(|interval| interval.label().into())
         .collect();
     ModelRc::new(VecModel::from(labels))
 }
@@ -176,7 +275,7 @@ fn wire_shutdown(app: &AppWindow, settings_window: &SettingsWindow) {
 fn wire_window_events(
     app: &AppWindow,
     settings_window: &SettingsWindow,
-    store: &Rc<SettingsStore>,
+    store: &Arc<SettingsStore>,
 ) {
     let app_weak = app.as_weak();
     let settings_window_weak = settings_window.as_weak();
@@ -234,6 +333,8 @@ fn wire_main_window(app: &AppWindow, settings_window: &SettingsWindow) {
         }
     });
 
+    app.on_see_release_clicked(|| update::open_in_browser(update::RELEASES_URL));
+
     let settings_window_weak = settings_window.as_weak();
     app.on_settings_clicked(move || {
         let Some(settings_window) = settings_window_weak.upgrade() else {
@@ -259,7 +360,7 @@ fn wire_main_window(app: &AppWindow, settings_window: &SettingsWindow) {
 fn wire_settings_window(
     settings_window: &SettingsWindow,
     app: &AppWindow,
-    store: &Rc<SettingsStore>,
+    store: &Arc<SettingsStore>,
 ) {
     let app_weak = app.as_weak();
     let store_ref = store.clone();
@@ -282,6 +383,32 @@ fn wire_settings_window(
         }
         store_ref.update(|settings| settings.theme = theme);
     });
+
+    let app_weak = app.as_weak();
+    let settings_window_weak = settings_window.as_weak();
+    let store_ref = store.clone();
+    settings_window.on_update_interval_changed(move |label| {
+        let interval = UpdateInterval::from_label(&label);
+        store_ref.update(|settings| settings.update_interval = interval);
+
+        // Turning checks back on should answer the question straight
+        // away rather than waiting out an interval that already elapsed.
+        if let (Some(app), Some(settings_window)) =
+            (app_weak.upgrade(), settings_window_weak.upgrade())
+        {
+            if interval == UpdateInterval::Never {
+                // Forget what the last check found as well as stopping
+                // future ones, so the banner doesn't return on the next
+                // launch after the user asked not to be told.
+                store_ref.update(|settings| settings.latest_seen_version = None);
+                announce_update(&app, &settings_window, None);
+            } else if interval.is_due(store_ref.get().last_update_check_time()) {
+                check_for_update(&app, &settings_window, &store_ref);
+            }
+        }
+    });
+
+    settings_window.on_see_release_clicked(|| update::open_in_browser(update::RELEASES_URL));
 
     let app_weak = app.as_weak();
     let store_ref = store.clone();

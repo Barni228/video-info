@@ -1,4 +1,5 @@
 import {
+    Button,
     ComboBox,
     ScrollView,
     Slider,
@@ -70,8 +71,15 @@ component SettingRow inherits HorizontalBox {
 
 export component SettingsWindow inherits Window {
     title: "Settings";
+    // The starting size is set from Rust (see size_settings_window in
+    // src/ui.rs), because these preferred-* values don't survive the
+    // ScrollView below -- it reports a small preferred height of its own
+    // and wins, which would leave the window opening at min-height.
+    // These stay as the fallback for anything that reads them directly.
     preferred-width: 340px;
     preferred-height: 240px;
+    // Deliberately small: it's the floor the user can shrink to, not the
+    // size the window opens at.
     min-width: 340px;
     min-height: 240px;
     background: Theme.surface-background;
@@ -95,17 +103,33 @@ export component SettingsWindow inherits Window {
     in property <float> font-size-default: 16.0;
     in property <int> theme-default-index: 0;
 
+    // --- Updates. The app only ever reports that a newer release
+    // exists; see src/update.rs. ---
+    in-out property <int> update-index: 0;
+    in property <[string]> update-options: ["Daily"];
+    in property <int> update-default-index: 0;
+    // Where the last check got to: "Checking...", "Up to date",
+    // "Version 0.6.0 is available", or empty before the first one.
+    in property <string> update-status: "";
+    in property <string> app-version: "";
+
     // Multiplier for font sizes hardcoded against the 16px baseline.
     property <float> font-scale: root.font-size / 16;
 
     callback font-size-changed(float);
     callback theme-changed(string);
     callback keep-on-top-changed(bool);
+    callback update-interval-changed(string);
+    callback see-release-clicked();
 
     ThemeBridge { }
 
+    // How tall the settings actually are, read by Rust to size the window
+    // on startup. Follows the font size and any settings added below.
+    out property <length> content-height: content.preferred-height;
+
     ScrollView {
-        VerticalBox {
+        content := VerticalBox {
             padding: 18px;
             spacing: 16px;
             alignment: start;
@@ -176,6 +200,39 @@ export component SettingsWindow inherits Window {
                 }
             }
 
+            VerticalBox {
+                padding: 0px;
+                spacing: 4px;
+
+                SettingRow {
+                    label: "Check for updates";
+                    reset-icon-size: root.font-size * 1.2px;
+                    modified: root.update-index != root.update-default-index;
+                    reset => {
+                        root.update-index = root.update-default-index;
+                        root.update-interval-changed(root.update-options[root.update-default-index]);
+                    }
+                }
+
+                ComboBox {
+                    model: root.update-options;
+                    current-index <=> root.update-index;
+                    selected(label) => { root.update-interval-changed(label); }
+                }
+
+                SelectableText {
+                    visible: root.update-status != "";
+                    text: root.update-status;
+                    color: Theme.secondary-text-color;
+                    font-size: 13px * root.font-scale;
+                }
+
+                Button {
+                    text: "See newest release";
+                    clicked => { root.see-release-clicked(); }
+                }
+            }
+
             SettingRow {
                 label: "Always on top";
                 reset-icon-size: root.font-size * 1.2px;
@@ -189,6 +246,13 @@ export component SettingsWindow inherits Window {
                     checked <=> root.keep-on-top;
                     toggled => { root.keep-on-top-changed(root.keep-on-top); }
                 }
+            }
+
+            SelectableText {
+                text: "Video Info " + root.app-version;
+                color: Theme.secondary-text-color;
+                font-size: 12px * root.font-scale;
+                horizontal-alignment: center;
             }
         }
     }

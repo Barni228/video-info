@@ -41,6 +41,10 @@ export component AppWindow inherits Window {
     in-out property <float> base-font-size: 16.0;
     in-out property <bool> keep-on-top: false;
 
+    // The version of a newer release, when a check found one; empty
+    // otherwise. Set from Rust -- see start_update_check in src/ui.rs.
+    in-out property <string> update-version: "";
+
     // --- Local view state ---
     in-out property <bool> show-raw-view: false;
 
@@ -56,6 +60,7 @@ export component AppWindow inherits Window {
     callback browse-clicked();
     callback copy-all-clicked();
     callback settings-clicked();
+    callback see-release-clicked();
 
     ThemeBridge { }
 
@@ -115,6 +120,33 @@ export component AppWindow inherits Window {
                     font-size: 22px * root.font-scale;
                     font-weight: 700;
                     color: Theme.text-color;
+                }
+
+                // Only ever a notification: the app doesn't update itself.
+                if root.update-version != "": Rectangle {
+                    background: Theme.panel-background;
+                    border-radius: 8px;
+                    border-width: 1px;
+                    border-color: Theme.accent-color;
+
+                    HorizontalBox {
+                        padding: 8px * root.zoom;
+                        spacing: 8px * root.zoom;
+
+                        Text {
+                            text: "Version " + root.update-version + " is available";
+                            color: Theme.text-color;
+                            font-size: 13px * root.font-scale;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            wrap: word-wrap;
+                        }
+
+                        Button {
+                            text: "See release";
+                            clicked => { root.see-release-clicked(); }
+                        }
+                    }
                 }
 
                 // Drop target. Native drag & drop is handled in Rust, off
