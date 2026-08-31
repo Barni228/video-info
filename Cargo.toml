@@ -50,22 +50,13 @@ extensions = [
     "mpeg",
     "flv",
     "wmv",
+    "gif",
 ]
 name = "Video File"
 role = "viewer"
 
 [[package.metadata.packager.file-associations]]
-extensions = [
-    "mp3",
-    "wav",
-    "flac",
-    "aac",
-    "m4a",
-    "ogg",
-    "opus",
-    "wma",
-    "aiff",
-]
+extensions = ["mp3", "wav", "flac", "aac", "m4a", "ogg", "opus", "wma", "aiff"]
 name = "Audio File"
 role = "viewer"
 
