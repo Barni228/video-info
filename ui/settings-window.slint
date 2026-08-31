@@ -1,4 +1,11 @@
-import { ComboBox, ScrollView, Slider, Switch, VerticalBox, HorizontalBox } from "std-widgets.slint";
+import {
+    ComboBox,
+    ScrollView,
+    Slider,
+    Switch,
+    VerticalBox,
+    HorizontalBox,
+} from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { SelectableText } from "widgets.slint";
 
@@ -7,8 +14,8 @@ component ResetButton {
     in property <length> icon-size: 18px;
     callback clicked();
 
-    width: root.icon-size + 4px;
-    height: root.icon-size + 4px;
+    width: root.icon-size + 8px;
+    height: root.icon-size + 8px;
 
     accessible-role: button;
     accessible-label: "Reset to default";
@@ -22,17 +29,13 @@ component ResetButton {
             border-radius: 4px;
         }
 
-        // Bootstrap Icons' "arrow-counterclockwise"
-        // (https://icons.getbootstrap.com/icons/arrow-counterclockwise/),
-        // recolored via `colorize` rather than drawn as a Unicode arrow
-        // glyph: some fonts (notably on Windows) don't include one, which
-        // showed up as a missing-glyph box there.
+        // Load reset button icon
         Image {
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             width: root.icon-size;
             height: root.icon-size;
-            source: @image-url("icons/arrow-counterclockwise.svg");
+            source: @image-url("icons/reset.svg");
             colorize: parent.has-hover ? Theme.accent-color : Theme.secondary-text-color;
         }
     }
@@ -117,7 +120,7 @@ export component SettingsWindow inherits Window {
 
                 SettingRow {
                     label: "Default font size";
-                    reset-icon-size: root.font-size * 1px;
+                    reset-icon-size: root.font-size * 1.2px;
                     modified: root.font-size != root.font-size-default;
                     reset => {
                         root.font-size = root.font-size-default;
@@ -156,7 +159,7 @@ export component SettingsWindow inherits Window {
 
                 SettingRow {
                     label: "Theme";
-                    reset-icon-size: root.font-size * 1px;
+                    reset-icon-size: root.font-size * 1.2px;
                     modified: root.theme-index != root.theme-default-index;
                     reset => {
                         root.theme-index = root.theme-default-index;
@@ -173,7 +176,7 @@ export component SettingsWindow inherits Window {
 
             SettingRow {
                 label: "Always on top";
-                reset-icon-size: root.font-size * 1px;
+                reset-icon-size: root.font-size * 1.2px;
                 modified: root.keep-on-top;
                 reset => {
                     root.keep-on-top = false;
